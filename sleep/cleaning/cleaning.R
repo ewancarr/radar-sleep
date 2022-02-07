@@ -10,6 +10,17 @@ library(lubridate)
 library(naniar)
 library(patchwork)
 
+# Functions -------------------------------------------------------------------
+
+check_overlap <- function(df_left, df_right,
+                          id_left, id_right) {
+  full_join(data.frame(left = unique(df_left[[id_left]]),
+                       in_left = TRUE),
+            data.frame(right = unique(df_right[[id_right]]),
+                       in_right = TRUE),
+            by = c("left" = "right")) %>%
+  count(in_left, in_right)
+}
 
 ###############################################################################
 ####                                                                      #####
@@ -116,7 +127,7 @@ outcomes <- outcomes %>%
   pivot_wider(id_cols = c("subject_id", "t"), names_from = "y",
               values_from = "value")
 
-# Check overlap between survey and REDCAP data. --------------------------------
+# Check overlap between survey and REDCAP data. -------------------------------
 
 # Check participants match (n=632):
 table(unique(survey$subject_id) %in% unique(redcap$subject_id))
@@ -187,12 +198,8 @@ sleep <- left_join(sleep, te, by = c("time_interval" = "timeInterval_ID"))
 # Check matches between survey/FitBit
 length(unique(sleep$participant_name))
 
-full_join(data.frame(fitbit = unique(sleep$participant_name),
-                     in_fitbit = TRUE),
-          data.frame(survey = unique(survey$subject_id),
-                     in_survey = TRUE),
-          by = c("fitbit" = "survey")) %>%
-  count(in_fitbit, in_survey)
+check_overlap(sleep, survey,
+              "participant_name", "subject_id")
 
 # 576 are in both FitBit sleep data *and* survey data.
 # 2 are in FitBit data only.
@@ -200,43 +207,57 @@ full_join(data.frame(fitbit = unique(sleep$participant_name),
 
 # Load derived sleep measures from Dan ----------------------------------------
 
+# NOTE: we're selecting a single observation per day, for now.
+
 derived <- read_csv(here("data", "raw", "sleep_measures", "2022-01-27",
                          "output.csv")) %>%
-  select(-`...1`)
+  select(-`...1`) %>%
+  mutate(merge_date = ymd(time_interval_readable)) %>%
+  group_by(user_id, merge_date) %>%
+  summarise(across(everything(),
+                   ~ first(na.omit(.x))))
 
-# Merge raw and derived sleep measures ----------------------------------------
+# Merge raw sleep data (from CSVs) with derived measures (from Dan) -----------
 
-CONTINUE HERE
+# Prepare raw FitBit data
+sleep <- sleep %>%
+  mutate(merge_date = as.Date(datetimeStart + hours(12)),
+         user_id = participant_name) %>%
+  group_by(user_id, merge_date) %>%
+  summarise(across(everything(), ~ first(na.omit(.x))))
 
-# TODO: explain approach
+# Check counts in each dataset
+derived %>% distinct(user_id, merge_date) %>% nrow()
+sleep %>% distinct(user_id, merge_date) %>% nrow()
+# --> close enough.
 
-sleep_sel <- sleep %>%
-  select(subject_id = participant_name, 
-         s_eff = sleep_efficiency,
-         s_tst = total_sleep_time,
-         t_start = datetimeStart,
-         t_end = datetimeEnd) %>%
-  mutate(merge_date = as.Date(t_end)) 
+# Select which measures from 'derived' we want (i.e. don't copy over columns
+# already present in 'sleep').
 
-# NOTE: some participants have multiple "daily" assessments per day. For now,
-# I'm just taking the first non-missing value. Need to think of better
-# approach.
+keep <- c("user_id", "merge_date",
+          names(derived)[!names(derived) %in% names(sleep)])
+derived <- derived[keep]
 
-sleep_sel <- sleep_sel %>%
-  group_by(subject_id, merge_date) %>%
-  summarise(across(c(s_eff, s_tst, t_start, t_end), ~ first(na.omit(.x))))
+# Merge
+sleep <- full_join(sleep, derived,
+                   by = c("user_id", "merge_date"))
+print(names(sleep))
+
+# Merge 3-monthly survey data with sleep data ---------------------------------
+
+# TODO: explain approach taken.
 
 expand_individual <- function(d, ...) {
     pmap_dfr(list(win_start = d$win_start,
                   win_end = d$win_end,
                   t = d$t,
-                  subject_id = d$subject_id),
+                  user_id = d$user_id),
              function(win_start,
                       win_end,
                       ids_date,
                       t,
-                      subject_id) {
-               data.frame(subject_id = subject_id,
+                      user_id) {
+               data.frame(user_id = user_id,
                           t = t,
                           merge_date = seq(win_start,
                                            win_end,
@@ -246,26 +267,20 @@ expand_individual <- function(d, ...) {
 
 survey <- survey %>%
   mutate(win_start = ids_date - days(13),
-         win_end = ids_date) 
+         win_end = ids_date,
+         user_id = subject_id) 
 
 lookup <- survey %>%
   drop_na(win_start, win_end) %>%
-  group_split(subject_id) %>%
+  group_split(user_id) %>%
   map_dfr(expand_individual)
 
 merged <- lookup %>%
-  left_join(sleep_sel, by = c("subject_id", "merge_date")) %>%
-  full_join(survey, by = c("subject_id", "t")) %>%
+  left_join(sleep, by = c("user_id", "merge_date")) %>%
+  full_join(survey, by = c("user_id", "t")) %>%
   as_tibble() %>%
-  select(subject_id, t, win_start, win_end, merge_date, ids_date,
-         ids_total, s_eff, s_tst, rel, det, t_start, t_end) %>%
-  group_by(subject_id, t) %>%
+  group_by(user_id, t) %>%
   mutate(n_obs = n()) %>%
   filter(t > 0)
 
-
-derived %>%
-
-
-
-# Check: 
+save(merged, file = here("data", "clean", "merged.Rdata")
