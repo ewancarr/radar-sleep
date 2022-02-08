@@ -148,6 +148,14 @@ survey <- survey %>%
 
 print(length(unique(survey$subject_id)))
 
+# Derive alternative outcome measures -----------------------------------------
+
+survey <- survey %>%
+  group_by(subject_id, t) %>%
+  mutate(rel_alt = case_when(rel == 1 & ids_total >= 25 ~ 2,
+                             rel == 0 & ids_total >= 25 ~ 1,
+                             rel == 0 ~ 3,
+                             TRUE ~ NA_real_))
 
 ###############################################################################
 ####                                                                      #####
@@ -278,9 +286,6 @@ lookup <- survey %>%
 merged <- lookup %>%
   left_join(sleep, by = c("user_id", "merge_date")) %>%
   full_join(survey, by = c("user_id", "t")) %>%
-  as_tibble() %>%
-  group_by(user_id, t) %>%
-  mutate(n_obs = n()) %>%
-  filter(t > 0)
+  as_tibble() 
 
-save(merged, file = here("data", "clean", "merged.Rdata")
+save(merged, file = here("data", "clean", "merged.Rdata"))
