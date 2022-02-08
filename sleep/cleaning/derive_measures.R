@@ -60,7 +60,7 @@ diff_clocks <- function(t1, t2) {
 }
 
 
-sjl <- sel %>%
+sjl <- merged %>%
   group_by(user_id, t, weekend) %>%
   summarise(mid = mean(clock_midpoint, na.rm = TRUE)) %>%
   pivot_wider(names_from = "weekend",
@@ -95,7 +95,7 @@ av2 <- merged %>%
                    ~ var(.x, na.rm = TRUE),
                    .names = "{.col}_var"),
             across(c(wkend, wkday, diff_min, age, gender,
-                     rel, rel_alt, ids_total),
+                     rel, relb, ids_total),
                    ~ first(na.omit(.x))))
 
 # Save ------------------------------------------------------------------------

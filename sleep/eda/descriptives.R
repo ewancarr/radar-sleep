@@ -2,10 +2,18 @@
 # Author:       Ewan Carr
 # Started:      2022-02-07
 
+renv::activate()
 library(tidyverse)
 library(here)
 library(gtsummary)
 load(here("data", "clean", "clean.Rdata"), verbose = TRUE)
+
+av2 %>%
+  ungroup() %>%
+  select(-user_id, -t) %>%
+  tbl_summary()
+
+
 
 av2 %>%
   ungroup() %>%

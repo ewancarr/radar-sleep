@@ -152,10 +152,9 @@ print(length(unique(survey$subject_id)))
 
 survey <- survey %>%
   group_by(subject_id, t) %>%
-  mutate(rel_alt = case_when(rel == 1 & ids_total >= 25 ~ 2,
-                             rel == 0 & ids_total >= 25 ~ 1,
-                             rel == 0 ~ 3,
-                             TRUE ~ NA_real_))
+  mutate(relb = case_when(rel == 0 & ids_total <= 25 ~ 0,
+                          rel == 1 & ids_total > 25 ~ 1,
+                          TRUE ~ NA_real_))
 
 ###############################################################################
 ####                                                                      #####
@@ -241,7 +240,6 @@ sleep %>% distinct(user_id, merge_date) %>% nrow()
 
 # Select which measures from 'derived' we want (i.e. don't copy over columns
 # already present in 'sleep').
-
 keep <- c("user_id", "merge_date",
           names(derived)[!names(derived) %in% names(sleep)])
 derived <- derived[keep]
@@ -280,7 +278,8 @@ survey <- survey %>%
 
 lookup <- survey %>%
   drop_na(win_start, win_end) %>%
-  group_split(user_id) %>%
+  group_by(user_id) %>%
+  group_split() %>%
   map_dfr(expand_individual)
 
 merged <- lookup %>%
