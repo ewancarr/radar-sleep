@@ -217,8 +217,8 @@ check_overlap(sleep, survey,
 
 # NOTE: we're selecting a single observation per day, for now.
 
-derived <- read_csv(here("data", "raw", "sleep_measures", "2022-01-27",
-                         "output.csv")) %>%
+derived <- read_csv(here("data", "raw", "sleep_measures", "2022-02-08",
+                         "output1.csv")) %>%
   select(-`...1`) %>%
   mutate(merge_date = ymd(time_interval_readable)) %>%
   group_by(user_id, merge_date) %>%
