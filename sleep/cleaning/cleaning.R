@@ -29,7 +29,8 @@ check_overlap <- function(df_left, df_right,
 ###############################################################################
 
 survey <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) %>%
-    rename(event = redcap_event_name,
+    rename(user_id = subject_id,
+           event = redcap_event_name,
            fut = Followuptime,
            psu = PSSUQ_TOTAL,
            eth = ETHCAT2,
@@ -46,7 +47,7 @@ survey <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) %>%
             )
         ),
         t = as.numeric(event),
-        pid = as.numeric(as.factor(subject_id)),
+        pid = as.numeric(as.factor(user_id)),
         male = as.numeric(gender) == 0,
         partner = as.numeric(marital_status) == 1,
         edyrs = as.numeric(education_years),
@@ -70,14 +71,17 @@ survey <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) %>%
 
 # Get other measures from REDCAP.dta ------------------------------------------
 
-redcap <- read_dta(here("data", "raw", "REDCAP data.dta"))
+redcap <- read_dta(here("data", "raw", "REDCAP data.dta")) %>%
+  mutate(t = case_when(str_detect(redcap_event_name, "enrolment_arm_1") ~ 0,
+                       TRUE ~ parse_number(redcap_event_name))) %>%
+  rename(user_id = subject_id)
 
 outcomes <- redcap %>%
-  select(subject_id,
+  select(user_id,
          redcap_event_name,
          contains("relapse"),
          contains("deterioration_2SDs")) %>%
-  pivot_longer(!c(subject_id, redcap_event_name),
+  pivot_longer(!c(user_id, redcap_event_name),
                names_to = "measure",
                values_to = "value") %>%
   mutate(y = case_when(str_detect(measure, "deterioration_2SDs") ~ "det",
@@ -115,7 +119,7 @@ outcomes <- outcomes %>%
 # at each time point? 
 
 outcomes %>%
-  group_by(subject_id, t, y) %>%
+  group_by(user_id, t, y) %>%
   summarise(single_value = length(unique(value)) == 1) %>%
   filter(!single_value)
 
@@ -123,35 +127,36 @@ outcomes %>%
 
 outcomes <- outcomes %>%
   filter(y %in% c("rel", "det")) %>%
-  select(subject_id, t, y, value) %>%
-  pivot_wider(id_cols = c("subject_id", "t"), names_from = "y",
+  select(user_id, t, y, value) %>%
+  pivot_wider(id_cols = c("user_id", "t"),
+              names_from = "y",
               values_from = "value")
 
 # Check overlap between survey and REDCAP data. -------------------------------
 
 # Check participants match (n=632):
-table(unique(survey$subject_id) %in% unique(redcap$subject_id))
+table(unique(survey$user_id) %in% unique(redcap$user_id))
 # --> Yep.
 
 # Check observations match:
-a <- distinct(outcomes, subject_id, t) %>% mutate(from_a = "outcomes")
-b <- distinct(survey, subject_id, t) %>% mutate(from_b = "survey")
+a <- distinct(outcomes, user_id, t) %>% mutate(from_a = "outcomes")
+b <- distinct(survey, user_id, t) %>% mutate(from_b = "survey")
 full_join(a, b) %>% 
   filter(t > 0) %>%
-  arrange(subject_id, t) %>%
+  arrange(user_id, t) %>%
   count(is.na(from_a) | is.na(from_b))
 # --> All but 2, which is OK for now.
 # TODO: query.
 
 survey <- survey %>%
-  full_join(outcomes, by = c("subject_id", "t"))
+  full_join(outcomes, by = c("user_id", "t"))
 
-print(length(unique(survey$subject_id)))
+print(length(unique(survey$user_id)))
 
 # Derive alternative outcome measures -----------------------------------------
 
 survey <- survey %>%
-  group_by(subject_id, t) %>%
+  group_by(user_id, t) %>%
   mutate(relb = case_when(rel == 0 & ids_total <= 25 ~ 0,
                           rel == 1 & ids_total > 25 ~ 1,
                           TRUE ~ NA_real_))
@@ -165,7 +170,7 @@ survey <- survey %>%
 ## Check survey respondents missing IDS date ----------------------------------
 
 missing_dates <- survey %>%
-  group_by(subject_id, t) %>%
+  group_by(user_id, t) %>%
   summarise(n_missing = sum(is.na(ids_date))) %>%
   filter(n_missing > 0) %>%
   spread(t, n_missing) %>%
@@ -177,14 +182,15 @@ head(missing_dates)
 ## Import missing dates (from Faith via email) --------------------------------
 
 fixed_dates <- read_csv(here("data", "raw", "fixed_dates.csv")) %>%
-  gather(t, ids_date, -subject_id) %>%
+  rename(user_id = subject_id) %>%
+  gather(t, ids_date, -user_id) %>%
   filter(ids_date != 0) %>%
   mutate(ids_date = dmy(ids_date),
          t = as.numeric(t))
 
 survey <- survey %>%
   mutate(ids_date = ymd(ids_date)) %>%
-  full_join(fixed_dates, by = c("subject_id", "t")) %>%
+  full_join(fixed_dates, by = c("user_id", "t")) %>%
   mutate(ids_date = coalesce(ids_date.x, ids_date.y))
 
 table(is.na(survey$ids_date))
@@ -206,7 +212,7 @@ sleep <- left_join(sleep, te, by = c("time_interval" = "timeInterval_ID"))
 length(unique(sleep$participant_name))
 
 check_overlap(sleep, survey,
-              "participant_name", "subject_id")
+              "participant_name", "user_id")
 
 # 576 are in both FitBit sleep data *and* survey data.
 # 2 are in FitBit data only.
