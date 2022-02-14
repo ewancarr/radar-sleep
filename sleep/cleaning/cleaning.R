@@ -161,6 +161,100 @@ survey <- survey %>%
                           rel == 1 & ids_total > 25 ~ 1,
                           TRUE ~ NA_real_))
 
+
+###############################################################################
+####                                                                      #####
+####          Load medication lookup; derive medication measures          #####
+####                                                                      #####
+###############################################################################
+
+# Load lookup table
+med_lookup <- read_csv(here("data", "raw",
+                            "medications", "medkey_complete.csv")) %>%
+  distinct(original, correct)
+
+# Load Matthew's categories
+cat_matthew <- read_csv(here("data", "raw", "medications",
+                             "Medication Types_MH.csv"))
+
+# Get medication data from REDCAP
+meds <- redcap %>%
+  select(user_id, t, starts_with("csri_6")) %>%
+  rename(med_name = csri_6_1_1) %>%
+  mutate(med_name = na_if(med_name, ""))
+
+# Check: are all medications in the lookup table?
+na.omit(meds$med_name[!(meds$med_name %in% med_lookup$original)])
+  
+meds <- meds %>%
+  left_join(med_lookup, by = c("med_name" = "original")) %>%
+  left_join(cat_matthew, by = c("correct" = "Medication Name")) %>%
+  select(user_id, t, med_name, correct, cat_matthew)
+
+med_summary <- meds %>%
+  group_by(t) %>%
+  mutate(n_t = n()) %>%
+  group_by(t, cat_matthew) %>%
+  summarise(n = n(),
+            n_t = first(n_t),
+            prop = n / n_t)
+
+p1a <- med_summary %>%
+  drop_na() %>%
+  ggplot(aes(x = t,
+             y = prop,
+             color = cat_matthew)) +
+  geom_line() +
+  geom_text(aes(label = n), nudge_y = 0.02) +
+  labs(x = "Month",
+       y = "Proportion of participants",
+       color = "Medication\ncategory",
+       title = "Proportion reporting each medication category") +
+  scale_x_continuous(breaks = unique(med_summary$t), limits = c(0, 24)) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal(base_family = "Inter")
+
+p1b <- med_summary %>%
+  drop_na() %>%
+  filter(prop < 0.2) %>%
+  ggplot(aes(x = t,
+             y = prop,
+             color = cat_matthew)) +
+  geom_line() +
+  geom_text(aes(label = n), nudge_y = 0.005) +
+  labs(x = "Month",
+       y = "Proportion of participants",
+       color = "Medication\ncategory",
+       title = "Proportion, focusing on less common medications") +
+  scale_x_continuous(breaks = unique(med_summary$t), limits = c(0, 24)) +
+  scale_y_continuous(labels = scales::percent) +
+  theme_minimal(base_family = "Inter")
+
+
+p2 <- med_summary %>%
+  distinct(t, n_t) %>%
+  ggplot(aes(x = t,
+             y = n_t)) +
+  geom_line() +
+  geom_text(aes(label = n_t), nudge_y = 20) +
+  scale_x_continuous(breaks = unique(med_summary$t), limits = c(0, 24)) +
+  theme_minimal(base_family = "Inter") +
+  theme(axis.ticks.x = element_blank(),
+  axis.title.x = element_blank(),
+  axis.text.x = element_blank()) +
+  labs(y = "N",
+       title = "Number of participants at timepoint")
+
+
+p_med <- p2 / p1a / p1b
+ggsave(p_med,
+       filename = "~/prop_med.png",
+       dev = "png",
+       dpi = 300,
+       width = 10, 
+       height = 12)
+
+
 ###############################################################################
 ####                                                                      #####
 ####                           Load FitBit data                           #####
