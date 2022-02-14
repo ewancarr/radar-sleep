@@ -252,7 +252,8 @@ derived <- derived[keep]
 
 # Merge
 sleep <- full_join(sleep, derived,
-                   by = c("user_id", "merge_date"))
+                   by = c("user_id", "merge_date")) %>%
+  clean_names()
 print(names(sleep))
 
 # Merge 3-monthly survey data with sleep data ---------------------------------
@@ -277,20 +278,39 @@ expand_individual <- function(d, ...) {
              })
 }
 
-survey <- survey %>%
-  mutate(win_start = ids_date - days(13),
-         win_end = ids_date,
-         user_id = subject_id) 
+add_sleep <- function(survey_data,
+                      sleep_data,
+                      w_start = -2,   # Start of window, offset from survey date
+                      w_end = 0       # End of window, offset from survey date
+                      ) {
+  
+  lookup <- survey_data %>%
+    select(ids_date, 
+           t,
+           user_id) %>%
+    mutate(win_start = ids_date + weeks(w_start),
+           win_end = ids_date + weeks(w_end)) %>%
+    drop_na(win_start, win_end) %>%
+    group_by(user_id) %>%
+    group_split() %>%
+    map_dfr(expand_individual) %>%
+    as_tibble()
+  
+  with_sleep <- lookup %>%
+    left_join(sleep_data, by = c("user_id", "merge_date"))
+  return(with_sleep) 
+}
 
-lookup <- survey %>%
-  drop_na(win_start, win_end) %>%
-  group_by(user_id) %>%
-  group_split() %>%
-  map_dfr(expand_individual)
+# Extract sleep days for required windows
+windows <- list(prev_2w = c(-2, 0),
+                first_month = c(-12, -8),
+                last_month = c(-4, 0))
 
-merged <- lookup %>%
-  left_join(sleep, by = c("user_id", "merge_date")) %>%
-  full_join(survey, by = c("user_id", "t")) %>%
-  as_tibble() 
+opts <- map(windows, ~ add_sleep(survey, sleep, .x[1], .x[2]))
 
-save(merged, file = here("data", "clean", "merged.Rdata"))
+# merged <- lookup %>%
+#   left_join(sleep, by = c("user_id", "merge_date")) %>%
+#   full_join(survey, by = c("user_id", "t")) %>%
+#   as_tibble() 
+
+save(opts, survey, sleep, file = here("data", "clean", "opts.Rdata"))
