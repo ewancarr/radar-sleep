@@ -3,3 +3,4 @@ data/clean/*
 renv/*
 .Rproj.user
 repo.Rproj
+.Rhistory
