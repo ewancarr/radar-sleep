@@ -4,3 +4,5 @@ renv/*
 .Rproj.user
 repo.Rproj
 .Rhistory
+
+.RData
