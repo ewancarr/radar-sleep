@@ -24,47 +24,87 @@ summarise_sleep <- function(sleep_data, min_days) {
     count(name = "n_days") %>%
     filter(n_days >= min_days) %>%
     left_join(sleep_data, by = c("user_id", "t"))
-
+  # Rename
+  selected <- rename(selected,
+                     tst = total_sleep_time,
+                     tib = time_in_bed,
+                     slpeff = sleep_efficiency,
+                     sol = sleep_onset_latency_minutes,
+                     sfi = sleep_fragmentation_index_hours,
+                     son = sleep_onset,
+                     soff = sleep_offset,
+                     insom = insomnia,
+                     hysom = hypersomnia,
+                     awak = awakenings)
   # Summarise measures
   selected %>%
     group_by(user_id, t) %>%
-    summarise(across(c(total_sleep_time,
-                       time_in_bed,
-                       sleep_efficiency,
-                       sleep_onset_latency_minutes,
-                       sleep_fragmentation_index_hours,
-                       insomnia,
-                       hypersomnia,
-                       sleep_onset,
-                       sleep_offset,
-                       sleep_fragmentation_index_hours),
-                     ~ mean(.x, na.rm = TRUE),
-                     .names = "{.col}_mean"),
-              across(c(awakenings),
-                     ~ median(.x, na.rm = TRUE),
+    mutate(across(c(tst, tib), ~ .x / 3600)) %>%
+    summarise(across(c(tst, tib, slpeff, sol, sfi, son, soff, awak),
+                     median,
+                     na.rm = TRUE,
                      .names = "{.col}_med"),
-              across(c(sleep_onset_latency_minutes),
-                     ~ var(.x, na.rm = TRUE),
+              across(c(insom, hysom), 
+                     mean, na.rm = TRUE,
+                     .names = "{.col}_prop"),
+              across(c(sol, tst, tib, slpeff),
+                     var, na.rm = TRUE,
                      .names = "{.col}_var")) %>%
     return()
 }
 
-pre <- summarise_sleep(opts[[2]], 14) %>% mutate(window = "pre")
-post <- summarise_sleep(opts[[3]], 14) %>% mutate(window = "post")
+sleep_m3 <- summarise_sleep(opts$last_month, 14)
 
-sleep_change <- bind_rows(pre, post) %>%
-  pivot_longer(-c(user_id, t, window),
-               names_to = "measure",
-               values_to = "value") %>%
-  pivot_wider(names_from = "window",
-              values_from = "value") %>%
-  mutate(diff = post - pre) %>%
-  drop_na(diff) %>%
-  pivot_wider(id_cols = c(user_id, t),
-              names_from = "measure",
-              values_from = c("pre", "post", "diff"))
+# The above function derives sleep measures in the last month of each 
+# 3-monthly window:
+# 
+#     T1                           T2
+#     │                            │
+#     └────────────────┬───────────┤
+#                      │ Sleep in  │
+#                      │  month 3  │
+#                      └───────────┘
+# 
+# We're going to measure changes in sleep, from month 3 in the current episode
+# to month three in the next episode:
+#   
+#                 T1                           T2
+#                 │                            │
+#     ┌───────────┼────────────────┬───────────┤
+#     │ Sleep in  │                │ Sleep in  │
+#     │  month 3  │                │  month 3  │
+#     └───────────┘                └───────────┘
+#       Previous                      Current
+#        window                        window
+#   
+
+# Merge with survey data ------------------------------------------------------
 
 merged <- survey %>%
-  left_join(sleep_change, by = c("user_id", "t"))
+  select(user_id, t, age, male, edyrs, wsas, gad, ids_total, relb, det) %>%
+  group_by(user_id) %>%
+  mutate(across(c(male, edyrs), ~ first(na.omit(.x))),
+         age_at_enrolment = min(age, na.rm = TRUE),
+         age_this_window = age_at_enrolment + (t / 12)) %>%
+  left_join(sleep_m3, by = c("user_id", "t"))
 
-save(merged, sleep_change, file = here("data", "clean", "merged.Rdata"))
+# Calculate change ------------------------------------------------------------
+
+# For sleep variables, this is the changes from M3 [previous window] to M3
+# [current window], i.e. sleep 12-15 weeks ago vs. sleep 0-4 weeks ago. 
+
+# For outcomes (i.e. ids_total) this is change between the current assessment
+# vs. the previous assessmetn (12 weeks ago).
+
+merged <- merged %>%
+  mutate(orig = TRUE, .before = 3) %>%
+  complete(user_id, t = seq(0, 24, 3)) %>%
+  arrange(user_id, t) %>%
+  mutate(across(c(tst_med:sol_var, ids_total), ~ .x - lag(.x), .names = "cm3_{.col}"),
+         across(starts_with("cm3_"), ~ abs(.x), .names = "{.col}_abs")) %>%
+  filter(orig) %>%
+  select(-orig)
+
+# Save ------------------------------------------------------------------------
+
+save(merged, file = here("data", "clean", "merged.Rdata"))

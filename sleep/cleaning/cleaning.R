@@ -377,7 +377,6 @@ add_sleep <- function(survey_data,
                       w_start = -2,   # Start of window, offset from survey date
                       w_end = 0       # End of window, offset from survey date
                       ) {
-  
   lookup <- survey_data %>%
     select(ids_date, 
            t,
@@ -389,7 +388,6 @@ add_sleep <- function(survey_data,
     group_split() %>%
     map_dfr(expand_individual) %>%
     as_tibble()
-  
   with_sleep <- lookup %>%
     left_join(sleep_data, by = c("user_id", "merge_date"))
   return(with_sleep) 
