@@ -115,7 +115,7 @@ outcomes <- outcomes %>%
   mutate(m_row = parse_number(redcap_event_name)) %>%
   filter(t == m_row)
 
-# Check: ensure that  each participant has a single, unique value of 'relapse'
+# Check: ensure that each participant has a single, unique value of 'relapse'
 # at each time point? 
 
 outcomes %>%
@@ -124,7 +124,6 @@ outcomes %>%
   filter(!single_value)
 
 # Reshape back to WIDE
-
 outcomes <- outcomes %>%
   filter(y %in% c("rel", "det")) %>%
   select(user_id, t, y, value) %>%
@@ -152,14 +151,6 @@ survey <- survey %>%
   full_join(outcomes, by = c("user_id", "t"))
 
 print(length(unique(survey$user_id)))
-
-# Derive alternative outcome measures -----------------------------------------
-
-survey <- survey %>%
-  group_by(user_id, t) %>%
-  mutate(relb = case_when(rel == 0 & ids_total <= 25 ~ 0,
-                          rel == 1 & ids_total > 25 ~ 1,
-                          TRUE ~ NA_real_))
 
 
 ###############################################################################
@@ -189,71 +180,7 @@ na.omit(meds$med_name[!(meds$med_name %in% med_lookup$original)])
 meds <- meds %>%
   left_join(med_lookup, by = c("med_name" = "original")) %>%
   left_join(cat_matthew, by = c("correct" = "Medication Name")) %>%
-  select(user_id, t, med_name, correct, cat_matthew)
-
-med_summary <- meds %>%
-  group_by(t) %>%
-  mutate(n_t = n()) %>%
-  group_by(t, cat_matthew) %>%
-  summarise(n = n(),
-            n_t = first(n_t),
-            prop = n / n_t)
-
-p1a <- med_summary %>%
-  drop_na() %>%
-  ggplot(aes(x = t,
-             y = prop,
-             color = cat_matthew)) +
-  geom_line() +
-  geom_text(aes(label = n), nudge_y = 0.02) +
-  labs(x = "Month",
-       y = "Proportion of participants",
-       color = "Medication\ncategory",
-       title = "Proportion reporting each medication category") +
-  scale_x_continuous(breaks = unique(med_summary$t), limits = c(0, 24)) +
-  scale_y_continuous(labels = scales::percent) +
-  theme_minimal(base_family = "Inter")
-
-p1b <- med_summary %>%
-  drop_na() %>%
-  filter(prop < 0.2) %>%
-  ggplot(aes(x = t,
-             y = prop,
-             color = cat_matthew)) +
-  geom_line() +
-  geom_text(aes(label = n), nudge_y = 0.005) +
-  labs(x = "Month",
-       y = "Proportion of participants",
-       color = "Medication\ncategory",
-       title = "Proportion, focusing on less common medications") +
-  scale_x_continuous(breaks = unique(med_summary$t), limits = c(0, 24)) +
-  scale_y_continuous(labels = scales::percent) +
-  theme_minimal(base_family = "Inter")
-
-
-p2 <- med_summary %>%
-  distinct(t, n_t) %>%
-  ggplot(aes(x = t,
-             y = n_t)) +
-  geom_line() +
-  geom_text(aes(label = n_t), nudge_y = 20) +
-  scale_x_continuous(breaks = unique(med_summary$t), limits = c(0, 24)) +
-  theme_minimal(base_family = "Inter") +
-  theme(axis.ticks.x = element_blank(),
-  axis.title.x = element_blank(),
-  axis.text.x = element_blank()) +
-  labs(y = "N",
-       title = "Number of participants at timepoint")
-
-
-p_med <- p2 / p1a / p1b
-ggsave(p_med,
-       filename = "~/prop_med.png",
-       dev = "png",
-       dpi = 300,
-       width = 10, 
-       height = 12)
-
+  select(user_id, t, med_name, correct, medication_category = cat_matthew)
 
 ###############################################################################
 ####                                                                      #####
@@ -269,8 +196,6 @@ missing_dates <- survey %>%
   filter(n_missing > 0) %>%
   spread(t, n_missing) %>%
   mutate(across(`0`:`15`, replace_na, 0))
-
-write_csv(missing_dates, "~/missing_dates.csv")
 head(missing_dates)
 
 ## Import missing dates (from Faith via email) --------------------------------
@@ -300,55 +225,87 @@ table(is.na(survey$ids_date))
 p <- here("data", "raw", "radarV1_MDD", "csv_files")
 sleep <- read_csv(paste0(p, "/dailyFeatures_fitbit_sleep.csv"))
 te <- read_csv(paste0(p, "/timeIntervals.csv"))
-sleep <- left_join(sleep, te, by = c("time_interval" = "timeInterval_ID"))
+sleep <- left_join(sleep, te,
+                   by = c("time_interval" = "timeInterval_ID")) %>%
+  clean_names()
+sleep$merge_date <- sleep$datetime_start
 
-# Check matches between survey/FitBit
-length(unique(sleep$participant_name))
+# Format "time" variable as datetime
+sleep$sleep_day <- as_date(sleep$datetime_start + hours(12))
+sleep$hr <- as.numeric(substr(sleep$time, 1, 2))
+sleep$min <- as.numeric(substr(sleep$time, 3, 4))
+sleep$time_formatted <- (sleep$sleep_day + 
+                         hours(sleep$hr + (sleep$min / 60)))
 
-check_overlap(sleep, survey,
-              "participant_name", "user_id")
+# Identify sleep events that finish in the next day
+sleep$next_day <- if_else(sleep$sleep_offset < sleep$sleep_onset, 1, 0)
 
-# 576 are in both FitBit sleep data *and* survey data.
-# 2 are in FitBit data only.
-# 47 are in survey data only.
+# Format "sleep_onset" and "sleep_offset" as datetime
+extract_dt <- function(time, origin) {
+  return(
+    origin +
+    hours(floor(time)) +  
+    minutes(as.integer(time %% 1 * 60))
+  )  
+}
+
+# Start sleeping
+sleep$start_sleep <- extract_dt(sleep$sleep_onset, sleep$sleep_day)
+
+# Stop sleeping
+sleep$stop_sleep <- extract_dt(sleep$sleep_offset, 
+                               sleep$sleep_day + days(sleep$next_day))
+
+sleep %>%
+  select(sleep_day, sleep_onset, sleep_offset, start_sleep, stop_sleep,
+         next_day) %>% 
+  print(n = 50)
+
+# Derive times of (i) going to bed; (ii) going to sleep; (iii) waking up;
+# (iv) getting up.
+
+# NOTE: We're adding a fixed amount, 50 minutes, to the "time in bed" because
+# without this, many people get up (i.e. out of bed) before they wake up.
+sleep$in_bed <- sleep$time_formatted + minutes(45)
+sleep$get_up <- sleep$in_bed + minutes(round(sleep$time_in_bed / 60))
+sleep$get_up <- if_else(sleep$get_up < sleep$stop_sleep,
+                        sleep$stop_sleep,
+                        sleep$get_up)
 
 # Load derived sleep measures from Dan ----------------------------------------
 
 # NOTE: we're selecting a single observation per day, for now.
 
-derived <- read_csv(here("data", "raw", "sleep_measures", "2022-02-08",
-                         "output1.csv")) %>%
-  select(-`...1`) %>%
-  mutate(merge_date = ymd(time_interval_readable)) %>%
-  group_by(user_id, merge_date) %>%
-  summarise(across(everything(),
-                   ~ first(na.omit(.x))))
+# derived <- read_csv(here("data", "raw", "sleep_measures", "2022-02-08",
+#                          "output1.csv")) %>%
+#   select(-`...1`) %>%
+#   mutate(merge_date = ymd(time_interval_readable)) 
 
 # Merge raw sleep data (from CSVs) with derived measures (from Dan) -----------
 
 # Prepare raw FitBit data
-sleep <- sleep %>%
-  mutate(merge_date = as.Date(datetimeStart + hours(12)),
-         user_id = participant_name) %>%
-  group_by(user_id, merge_date) %>%
-  summarise(across(everything(), ~ first(na.omit(.x))))
+# sleep <- sleep %>%
+#   mutate(merge_date = as.Date(datetimeStart + hours(12)),
+#          user_id = participant_name) %>%
+#   group_by(user_id, merge_date) %>%
+#   summarise(across(everything(), ~ first(na.omit(.x))))
 
-# Check counts in each dataset
-derived %>% distinct(user_id, merge_date) %>% nrow()
-sleep %>% distinct(user_id, merge_date) %>% nrow()
+# # Check counts in each dataset
+# derived %>% distinct(user_id, merge_date) %>% nrow()
+# sleep %>% distinct(user_id, merge_date) %>% nrow()
 # --> close enough.
 
 # Select which measures from 'derived' we want (i.e. don't copy over columns
 # already present in 'sleep').
-keep <- c("user_id", "merge_date",
-          names(derived)[!names(derived) %in% names(sleep)])
-derived <- derived[keep]
+# keep <- c("user_id", "merge_date",
+#           names(derived)[!names(derived) %in% names(sleep)])
+# derived <- derived[keep]
 
 # Merge
-sleep <- full_join(sleep, derived,
-                   by = c("user_id", "merge_date")) %>%
-  clean_names()
-print(names(sleep))
+# sleep <- full_join(sleep, derived,
+#                    by = c("user_id", "merge_date")) %>%
+#   clean_names()
+# print(names(sleep))
 
 # Merge 3-monthly survey data with sleep data ---------------------------------
 
@@ -374,8 +331,8 @@ expand_individual <- function(d, ...) {
 
 add_sleep <- function(survey_data,
                       sleep_data,
-                      w_start = -2,   # Start of window, offset from survey date
-                      w_end = 0       # End of window, offset from survey date
+                      w_start = -2,  # Start of window, offset from survey date
+                      w_end = 0      # End of window, offset from survey date
                       ) {
   lookup <- survey_data %>%
     select(ids_date, 
@@ -399,10 +356,5 @@ windows <- list(prev_2w = c(-2, 0),
                 last_month = c(-4, 0))
 
 opts <- map(windows, ~ add_sleep(survey, sleep, .x[1], .x[2]))
-
-# merged <- lookup %>%
-#   left_join(sleep, by = c("user_id", "merge_date")) %>%
-#   full_join(survey, by = c("user_id", "t")) %>%
-#   as_tibble() 
 
 save(opts, survey, sleep, file = here("data", "clean", "opts.Rdata"))
