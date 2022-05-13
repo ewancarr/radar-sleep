@@ -1,8 +1,9 @@
 data/raw/*
 data/clean/*
 renv/*
-.Rproj.user
+*.Rproj.*
 repo.Rproj
 .Rhistory
-
-.RData
+*.pdf
+**/.Rprofile
+**/.DS_Store
