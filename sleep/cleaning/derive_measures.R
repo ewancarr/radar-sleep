@@ -8,14 +8,9 @@ library(dtplyr)
 library(lubridate)
 library(naniar)
 library(janitor)
+library(data.table)
 
 load(here("data", "clean", "opts.Rdata"), verbose = TRUE)
-
-###############################################################################
-####                                                                      #####
-####                          Tidy sleep measures                         #####
-####                                                                      #####
-###############################################################################
 
 derive_midpoint <- function(start, stop) {
   half <- round(0.5 * (interval(start, stop) / minutes(1)))
@@ -23,101 +18,174 @@ derive_midpoint <- function(start, stop) {
   return(hour(midpoint) + (minute(midpoint) / 60))
 }
 
-derive_sleep_measures <- function(d) {
-  d %>%
-    mutate(total_hours = total_sleep_time / 3600,
-           time_in_bed = time_in_bed / 3600,
-           sleep_fragmentation_index = awakenings / total_hours,
-           sleep_onset_latency_minutes = interval(in_bed, start_sleep) / minutes(1),
-           sleep_onset_latency_hours = sleep_onset_latency_minutes / 60,
-           sleep_midpoint = derive_midpoint(start_sleep, stop_sleep))
-}
+weekend <- c("Fri", "Sat")
 
-opts$last_month <- derive_sleep_measures(opts$last_month)
-
-###############################################################################
-####                                                                      #####
-####               Derive sleep measures for chosen window                #####
-####                                                                      #####
-###############################################################################
+# Select window ---------------------------------------------------------------
 
 sleep_data <- opts$last_month
-min_days <- 7
 
 # Select only observations with minimum required days of data -----------------
 
-sel <- sleep_data %>%
-  group_by(user_id, t) %>%
-  drop_na(total_hours) %>%
-  summarise(n_days = length(unique(merge_date))) %>%
-  filter(n_days >= min_days) %>%
+# NOTE: this is set to a minimum number of WEEKDAYS.
+
+min_days <- 7
+
+sel <- sleep_data |>
+  group_by(user_id, t) |>
+  drop_na(total_sleep_time) |>
+  summarise(n_weekdays = sum(!(lubridate::wday(unique(merge_date), label = TRUE) %in% weekend)),
+            n_days = length(unique(merge_date))) |>
+  filter(n_weekdays >= min_days) |>
   left_join(sleep_data, by = c("user_id", "t"))
+  
+# Select/rename required variables --------------------------------------------
 
-# Rename some variables -------------------------------------------------------
-
-sel <- rename(sel,
-              tst = total_hours,
+sel <- select(sel,
+              user_id,
+              t,
+              n_days,
+              merge_date,
+              next_day,
+              tst = total_sleep_time,
               tib = time_in_bed,
               slpeff = sleep_efficiency,
-              sol = sleep_onset_latency_hours,
-              sfi = sleep_fragmentation_index,
+              sol,
+              start_sleep,
+              stop_sleep,
               son = sleep_onset,
               soff = sleep_offset,
-              smid = sleep_midpoint,
               insom = insomnia,
               hysom = hypersomnia,
               awak = awakenings)
 
-# Combine multiple events per day ---------------------------------------------
+# Select a single sleep event per day -----------------------------------------
 
-perday <- sel %>%
-  drop_na(user_id, t, merge_date, participant_name) %>%
-  group_by(user_id, t, merge_date) %>%
-  lazy_dt() %>%
-  summarise(across(c(start_sleep, stop_sleep, smid), ~ first(na.omit(.x))),
-            across(c(tst, tib, awak), sum, na.rm = TRUE),
-            across(c(slpeff, sol, son, soff, sfi), mean, na.rm = TRUE),
-            across(c(insom, hysom), max, na.rm = TRUE)) %>%
-  as_tibble()
+# We've discussed various ways to solve this. For now, I'm selecting the single
+# longest sleep event, with the idea being that this captures the main sleep
+# event, and secondary sleep events are naps, etc.
 
-# Derive "Social Jet Lag" -----------------------------------------------------
+# Not ideal, but arguably better than combining sleep events, esp. when it 
+# isn't straightforward (e.g. the mean of two sleep onsets).
+
+sel <- na.omit(sel, cols = c("user_id", "merge_date", "tst"))
+setDT(sel)[,
+           c("n_events", "longest") := .(.N, max(tst, na.rm = TRUE)),
+           by = .(user_id, merge_date)]
+sel <- sel[tst == longest, head(.SD, 1), by = .(user_id, merge_date)]
+
+# Check: this should contain 0 rows
+sel[, by = .(user_id, merge_date), count := .N][count > 1, ]
+
+sel <- as_tibble(sel)
+
+# Derive some measures --------------------------------------------------------
+
+sel$tst <- sel$tst / 3600               # Total sleep time (minutes --> hours)
+sel$tib <- sel$tib / 3600               # Time in bed (minutes --> hours)
+sel$sfi <- sel$awak / sel$tst           # Sleep Fragmentation Index (SFI)
+sel$smid <- derive_midpoint(sel$start_sleep, sel$stop_sleep)
+
+# Relative sleep onset/offset -------------------------------------------------
+
+# Difference between start of sleep and [that person's] median start of
+# sleep [within this time period]. Variance value of days within time
+# period.
+
+clock_diff <- function(i) {
+  # Function to calculate difference in hours between two 24 hour clocks.
+  from <- min(i)
+  to <- max(i)
+  d_fw <- (from + 24) - to
+  d_bw <- to - from
+  return(min(c(d_fw, d_bw)))
+}
+
+
+clock_diff <- function(i) {
+  # This isn't pretty, but...
+  # ---------------------------------------------------------------------------
+  # I needed away to calculate the difference between two 24 hour clocks. i.e.
+  # 23 vs. 02 = +3
+  # 05 vs. 21 = -8
+  # The approach taken here is to find the smallest interval between 'a' and
+  # and 'b' assuming that these clock times are:
+  # i.    On the same day
+  # ii.   'a' is day before 'b'
+  # iii.  'b' is day before 'a'
+  # The function then returns the smallest absolute interval
+  opts <- list(i = c("2021-01-01", "2021-01-01"),
+               ii = c("2021-01-01", "2021-01-02"),
+               iii = c("2021-01-02", "2021-01-01"))
+  res <- map_dbl(opts, function(o) {
+                   start_time <- as.POSIXct(i[[1]] * 3600, origin = o[1])
+                   end_time <- as.POSIXct(i[[2]] * 3600, origin = o[2])
+                   return(as.numeric(difftime(start_time,
+                                              end_time,
+                                              units = "hours"))) })
+  return(as.numeric(res[which(abs(res) == min(abs(res)))])[1])
+}
+
+# Check that the above function is behaving correctly
+if (verbose) {
+  cross_df(list(a = 1:24, b = 24:1)) |>
+    rowwise() |>
+    mutate(diff = clock_diff(c(a, b))) |>
+    ggplot(aes(x = a,
+               y = b,
+               label = diff,
+               color = diff)) +
+      geom_text() +
+      theme_minimal() +
+      scale_x_continuous(breaks = 1:24) +
+      scale_y_continuous(breaks = 1:24)  +
+      labs(x = "T1", y = "T2")
+}
+
+sel <- sel |>
+  group_by(user_id, t) |>
+  mutate(# Calculate median onset/offset per monthly period
+         son_med = median(son, na.rm = TRUE),
+         soff_med = median(soff, na.rm = TRUE))
+sel$son_rel <- apply(sel[, c("son", "son_med")], 1, clock_diff)
+sel$soff_rel <- apply(sel[, c("soff", "soff_med")], 1, clock_diff)
+
+# Social Jet Lag --------------------------------------------------------------
 
 # Absolute value of the difference in the midpoint of sleep times between
 # weekdays and weekends.
 
-sjl <- sel %>%
-  mutate(day_label = wday(merge_date, label = TRUE),
-         weekend = if_else(day_label %in% c("Fri", "Sat"),
-                           "wkend", "wkday")) %>%
-  group_by(user_id, t, weekend) %>%
-  summarise(mid_sjl = mean(smid, na.rm = TRUE)) %>%
-  select(user_id, t, weekend, mid_sjl) %>%
+sjl <- sel |>
+  mutate(day_label = lubridate::wday(merge_date, label = TRUE),
+         weekend = if_else(day_label %in% c("Fri", "Sat"), "wkend", "wkday")) |>
+  group_by(user_id, t, weekend) |>
+  summarise(mid_sjl = mean(smid, na.rm = TRUE)) |>
+  select(user_id, t, weekend, mid_sjl) |>
   pivot_wider(names_from = "weekend",
-              values_from = "mid_sjl") %>%
-  mutate(sjl = wkend - wkday) %>%
+              values_from = "mid_sjl") |>
+  mutate(sjl = wkend - wkday) |>
   select(user_id, t, sjl)
 
 sel <- left_join(sel, sjl, by = c("user_id", "t"))
 
 # Summarise sleep measures for this time period -------------------------------
 
-sleep_vars <- sel %>%
-  group_by(user_id, t) %>%
-  mutate(awake_at_2am = hour(start_sleep) < 2 & hour(stop_sleep) > 2,
-         abs_son = son - median(son, na.rm = TRUE),
-         abs_soff = soff - median(soff, na.rm = TRUE)) %>%
+sleep_vars <- sel |>
+  # DECIDE: only summarise weekday sleep, or use all days? --------------------
+  filter(!(lubridate::wday(merge_date, label = TRUE) %in% weekend)) |>
+  group_by(user_id, t) |>
+  mutate(awake_at_2am = hour(start_sleep) < 2 & hour(stop_sleep) > 2) |>
   summarise(sjl = first(na.omit(sjl)),
-            across(c(tst, tib, slpeff, sol, sfi, son, soff, awak),
+            hysom_ever = max(hysom, na.rm = TRUE),
+            across(c(tst, tib, slpeff, sol, sfi, awak, smid),
                    median,
                    na.rm = TRUE,
                    .names = "{.col}_med"),
-            across(c(insom, hysom),
-                   mean, na.rm = TRUE,
-                   .names = "{.col}_prop"),
-            across(c(sol, tst, tib, slpeff, smid, abs_son, abs_soff),
+            across(c(sol, tst, tib, slpeff, son_rel, soff_rel),
                    var, na.rm = TRUE,
                    .names = "{.col}_var"),
-            sri = mean(awake_at_2am, na.rm = TRUE)) %>%
+            sri = mean(awake_at_2am, na.rm = TRUE),
+            smid_var = var(smid - smid_med),  
+            across(c(son_med, soff_med), first)) |>
   arrange(user_id, t)
 
 # The above function derives sleep measures in the last month of each 
@@ -181,40 +249,82 @@ sleep_vars <- sel %>%
 
 # Derive alternative outcome measures -----------------------------------------
 
-survey <- survey %>%
-  group_by(user_id, t) %>%
+survey <- survey |>
+  group_by(user_id, t) |>
   mutate(relb = case_when(rel == 0 & ids_total <= 25 ~ 0,
                           rel == 1 & ids_total > 25 ~ 1,
                           TRUE ~ NA_real_))
 
 # Merge sleep measures with survey data ---------------------------------------
 
-merged <- survey %>%
+merged <- survey |>
   select(user_id, t, age, male, edyrs, wsas, gad,
-         ids_total, rel, relb, det) %>%
-  group_by(user_id) %>%
+         ids_total, rel, relb, det,
+         medication_category,
+         melancholic_depression,
+         atypical_depression) |>
+  group_by(user_id) |>
   mutate(across(c(male, edyrs), ~ dplyr::first(na.omit(.x))),
-         age_at_enrolment = min(age, na.rm = TRUE),
-         age_this_window = age_at_enrolment + (t / 12)) %>%
+         age = min(age, na.rm = TRUE),
+         age_this_window = age + (t / 12)) |>
   left_join(sleep_vars, by = c("user_id", "t"))
 
-# Calculate change ------------------------------------------------------------
+# Calculate change (in sleep measures, IDS total score) -----------------------
 
 # For sleep variables, this is the changes from M3 [previous window] to M3
 # [current window], i.e. sleep 12-15 weeks ago vs. sleep 0-4 weeks ago. 
 
 # For outcomes (i.e. ids_total) this is change between the current assessment
-# vs. the previous assessmetn (12 weeks ago).
+# vs. the previous assessment (12 weeks ago).
 
 merged$orig <- TRUE
-merged <- expand(merged, t = seq(3, 24, 3)) %>%
-  full_join(merged, by = c("user_id", "t")) %>%
-  arrange(user_id, t) %>%
-  mutate(across(c(sjl:sri, ids_total), ~ .x - lag(.x), .names = "cm3_{.col}"),
-         across(starts_with("cm3_"), ~ abs(.x), .names = "{.col}_abs")) %>%
-  filter(orig) %>%
-  select(-orig)
+merged <- tidyr::expand(merged, t = seq(3, 24, 3)) |>
+  full_join(merged, by = c("user_id", "t")) |>
+  arrange(user_id, t) |>
+  mutate(# For some variable, calculate raw change (i.e. current minus lagged)
+         across(c(sjl, tst_med, tib_med, slpeff_med,
+                  sol_med, sfi_med, awak_med,
+                  hysom_ever, sol_var, tst_var,
+                  ids_total), 
+                ~ .x - dplyr::lag(.x), .names = "cm3_{.col}"),
+         lag_ids_total = dplyr::lag(ids_total, 1),
+         across(c(ids_total, son_med, soff_med), dplyr::lag, 1,
+                .names = "lag_{.col}"),
+         across(starts_with("cm3_"), ~ abs(.x), .names = "{.col}_abs"))
+merged$cm3_son_med <- apply(merged[, c("lag_son_med", "son_med")], 1, clock_diff)
+merged$cm3_soff_med <- apply(merged[, c("lag_soff_med", "soff_med")], 1, clock_diff)
+merged <- filter(merged, orig & !is.na(user_id))
 
-# Save ------------------------------------------------------------------------
+###############################################################################
+####                                                                      #####
+####                          Depression subtypes                         #####
+####                                                                      #####
+###############################################################################
+
+merged <- merged |>
+  mutate(subtype = case_when(melancholic_depression & atypical_depression ~ "Both",
+                             melancholic_depression ~ "Melancholic",
+                             atypical_depression ~ "Atypical",
+                             TRUE ~ "Neither"),
+         subtype = factor(subtype, levels = c("Neither",
+                                              "Atypical",
+                                              "Melancholic",
+                                              "Both")))
+
+###############################################################################
+####                                                                      #####
+####                                 Misc.                                #####
+####                                                                      #####
+###############################################################################
+
+# Create numeric ID -----------------------------------------------------------
+
+merged$pid <- as.numeric(as.factor(merged$user_id))
+
+###############################################################################
+####                                                                      #####
+####                                 Save                                 #####
+####                                                                      #####
+###############################################################################
 
 save(merged, file = here("data", "clean", "merged.Rdata"))

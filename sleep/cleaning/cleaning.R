@@ -2,13 +2,16 @@
 # Author:       Ewan Carr
 # Started:      2022-02-07
 
-library(tidyverse)
 library(here)
 library(haven)
 library(janitor)
 library(lubridate)
 library(naniar)
-library(patchwork)
+library(fs)
+library(data.table)
+library(dtplyr)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyverse)
 
 # Functions -------------------------------------------------------------------
 
@@ -28,6 +31,13 @@ check_overlap <- function(df_left, df_right,
 ####                                                                      #####
 ###############################################################################
 
+which_event <- function(x) {
+  if_else(x == "enrolment_arm_1",
+          "0",
+          str_replace(x, "_month_assessmen[t]*_arm_1", ""))
+}
+
+
 survey <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) %>%
     rename(user_id = subject_id,
            event = redcap_event_name,
@@ -38,14 +48,7 @@ survey <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) %>%
            ids_date = IDSdate) %>%
     clean_names() %>%
     mutate(
-        event = if_else(event == "enrolment_arm_1",
-            "0",
-            str_replace(
-                event,
-                "_month_assessmen[t]*_arm_1",
-                ""
-            )
-        ),
+        event = which_event(event),
         t = as.numeric(event),
         pid = as.numeric(as.factor(user_id)),
         male = as.numeric(gender) == 0,
@@ -68,6 +71,51 @@ survey <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) %>%
         bame = if_else(is.na(eth), NA, as.numeric(eth) %in% 2:5)
     ) %>%
     drop_na(pid, t, fut)
+
+# Get IDS items from larger survey dataset ------------------------------------
+
+ids_items <- read_dta(here("data", "raw", "totaldataset.dta")) %>%
+  select(user_id = subject_id,
+         event = redcap_event_name,
+         starts_with("ids_")) %>%
+  mutate(event = which_event(event),
+         t = as.numeric(event)) %>%
+  rowwise() %>%
+  mutate(# Atypical depression ------------------------------------------------
+         # 1. Mood reactivity (ids_8 = 0, 1, 2)
+         mood_reactivity = ids_8 %in% 0:2,
+         num_trues = sum(# 2. Leaden paralysis (ids_30 = 2, 3)
+                         (ids_30 %in% 2:3)) +
+                         # 3. Weight gain (ids_14 = 2, 3) OR increased appetite (ids_12 = 2, 3)
+                         (ids_14 %in% 2:3 | ids_12 %in% 2:3) +
+                         # 4. Hypersomnia (ids_4 = 2, 3)
+                         (ids_4 %in% 2:3) +
+                         # 5. Interpersonal sensitivity (ids_29 = 3)
+                         (ids_29 == 3),
+        atypical_depression = mood_reactivity & num_trues >= 2, 
+        # Melancholic depression ----------------------------------------------
+        # 1. Mood reactivity (ids_8 = 2, 3) OR pleasure (ids_21 = 2, 3)
+        mood_reactivity = (ids_8 %in% 2:3 | ids_21 %in% 2:3),
+        num_trues = sum(# 2. Quality of mood (ids_10 = 3)
+                        (ids_10 == 3) +
+                        # 3. Mood variation (ids_9 = 2, 3)
+                        (ids_9 %in% 2:3) +
+                        # 4. Psychomotor retardation (ids_23 = 2, 3) OR Psychomotor Agitation (ids_24 = 2, 3)
+                        (ids_23 %in% 2:3 | ids_24 %in% 2:3) +
+                        # 5. Appetite decrease (ids_11 = 2, 3) OR Weight decrease (ids_13 = 3)
+                        (ids_11 %in% 2:3 | ids_13 == 3) +
+                        # 6. Self-outlook (ids_16 = 2, 3)
+                        (ids_16 %in% 2:3)),
+         melancholic_depression = mood_reactivity & (num_trues >= 3))
+
+survey <- ids_items %>%
+  select(user_id,
+         t = event,
+         atypical_depression,
+         melancholic_depression) %>%
+  mutate(t = as.numeric(t)) %>%
+  right_join(survey, 
+             by = c("user_id", "t"))
 
 # Get other measures from REDCAP.dta ------------------------------------------
 
@@ -152,21 +200,22 @@ survey <- survey %>%
 
 print(length(unique(survey$user_id)))
 
-
 ###############################################################################
 ####                                                                      #####
 ####          Load medication lookup; derive medication measures          #####
 ####                                                                      #####
 ###############################################################################
 
-# Load lookup table
+# Create lookup table (this was then sent to Matthew for checking)
 med_lookup <- read_csv(here("data", "raw",
                             "medications", "medkey_complete.csv")) %>%
   distinct(original, correct)
 
 # Load Matthew's categories
 cat_matthew <- read_csv(here("data", "raw", "medications",
-                             "Medication Types_MH.csv"))
+                             "Medication Types_MH.csv"),
+                        col_types = "c_c",
+                        col_names = c("medication_name", "cat_matthew"))
 
 # Get medication data from REDCAP
 meds <- redcap %>%
@@ -175,12 +224,31 @@ meds <- redcap %>%
   mutate(med_name = na_if(med_name, ""))
 
 # Check: are all medications in the lookup table?
-na.omit(meds$med_name[!(meds$med_name %in% med_lookup$original)])
+not_found <- !(meds$med_name %in% med_lookup$original)
+table(not_found)
+
+# Check: which are missing?
+paste(na.omit(meds$med_name[not_found]))
   
 meds <- meds %>%
   left_join(med_lookup, by = c("med_name" = "original")) %>%
-  left_join(cat_matthew, by = c("correct" = "Medication Name")) %>%
+  left_join(cat_matthew, by = c("correct" = "medication_name")) %>%
   select(user_id, t, med_name, correct, medication_category = cat_matthew)
+
+# Create simplified measures --------------------------------------------------
+
+meds <- meds %>%
+  mutate(meds_mdd = medication_category %in% c("antidepressant",
+                                               "antipsychotic",
+                                               "anticonvulsant",
+                                               "stimulating antidepressant"),
+         meds_sleep = medication_category %in% c("benzodiazepine",
+                                                 "hypnotic"),
+         meds_other = !is.na(medication_category) & !(meds_mdd | meds_sleep))
+
+survey <- left_join(survey,
+                    select(meds, user_id, t, medication_category),
+                    by = c("t", "user_id"))
 
 ###############################################################################
 ####                                                                      #####
@@ -220,7 +288,9 @@ table(is.na(survey$ids_date))
 ####                                                                      #####
 ###############################################################################
 
-# Load raw FitBit data --------------------------------------------------------
+# Load 'sleep features' -------------------------------------------------------
+
+# These are the daily sleep features from WP8 / Dan.
 
 p <- here("data", "raw", "radarV1_MDD", "csv_files")
 sleep <- read_csv(paste0(p, "/dailyFeatures_fitbit_sleep.csv"))
@@ -256,56 +326,69 @@ sleep$start_sleep <- extract_dt(sleep$sleep_onset, sleep$sleep_day)
 sleep$stop_sleep <- extract_dt(sleep$sleep_offset, 
                                sleep$sleep_day + days(sleep$next_day))
 
-sleep %>%
-  select(sleep_day, sleep_onset, sleep_offset, start_sleep, stop_sleep,
-         next_day) %>% 
-  print(n = 50)
+# Identify site 
+sleep <- sleep %>%
+  mutate(site = case_when(project_id == "RADAR-MDD-CIBER-S1" ~ "CIBER",
+                          project_id == "RADAR-MDD-CIBER-s1" ~ "CIBER",
+                          project_id == "RADAR-MDD-VUmc-s1" ~ "VUmc",
+                          project_id == "RADAR-MDD-KCL-s1" ~ "KCL",
+                          TRUE ~ NA_character_))
 
-# Derive times of (i) going to bed; (ii) going to sleep; (iii) waking up;
-# (iv) getting up.
+# Export lookup, used when processing FitBit step data
+days <- sleep %>%
+  select(user_id = participant_name,
+         site,
+         sleep_day) %>%
+  distinct()
 
-# NOTE: We're adding a fixed amount, 50 minutes, to the "time in bed" because
-# without this, many people get up (i.e. out of bed) before they wake up.
-sleep$in_bed <- sleep$time_formatted + minutes(45)
-sleep$get_up <- sleep$in_bed + minutes(round(sleep$time_in_bed / 60))
-sleep$get_up <- if_else(sleep$get_up < sleep$stop_sleep,
-                        sleep$stop_sleep,
-                        sleep$get_up)
+save(days, file = here("data", "clean", "days_lookup.Rdata"))
 
-# Load derived sleep measures from Dan ----------------------------------------
+# Load FitBit steps data ------------------------------------------------------
 
-# NOTE: we're selecting a single observation per day, for now.
+# Load pre-processed step data
+load(here("data", "clean", "step_data.Rdata"), verbose = TRUE)
 
-# derived <- read_csv(here("data", "raw", "sleep_measures", "2022-02-08",
-#                          "output1.csv")) %>%
-#   select(-`...1`) %>%
-#   mutate(merge_date = ymd(time_interval_readable)) 
+# Fix time zones in steps data
+steps <- steps %>%
+  left_join(distinct(sleep, user_id, site)) %>%
+  mutate(value_time_tz = case_when(site == "CIBER" ~ force_tz(value_time, tz = "Europe/London"),
+                                   site == "VUmc" ~ force_tz(value_time, tz = "Europe/London"),
+                                   site == "KCL" ~ force_tz(value_time, tz = "Europe/London")))
 
-# Merge raw sleep data (from CSVs) with derived measures (from Dan) -----------
+# Fix time zones in 'sleep features' dataset # TODO: still WIP
+sleep <- sleep %>% 
+  mutate(start_sleep_tz = case_when(site == "CIBER" ~ force_tz(start_sleep, tz = "Europe/London"),  # Madrid
+                                    site == "VUmc" ~ force_tz(start_sleep, tz = "Europe/London"),  # Amsterdam
+                                    site == "KCL" ~ force_tz(start_sleep, tz = "Europe/London")))
+sleep_onset <- select(sleep,
+                      user_id, site, sleep_day, start_sleep, start_sleep_tz)
 
-# Prepare raw FitBit data
-# sleep <- sleep %>%
-#   mutate(merge_date = as.Date(datetimeStart + hours(12)),
-#          user_id = participant_name) %>%
-#   group_by(user_id, merge_date) %>%
-#   summarise(across(everything(), ~ first(na.omit(.x))))
 
-# # Check counts in each dataset
-# derived %>% distinct(user_id, merge_date) %>% nrow()
-# sleep %>% distinct(user_id, merge_date) %>% nrow()
-# --> close enough.
+# Merge step data with sleep onset
+ss <- inner_join(steps, sleep_onset, by = c("site", "user_id", "sleep_day"))
 
-# Select which measures from 'derived' we want (i.e. don't copy over columns
-# already present in 'sleep').
-# keep <- c("user_id", "merge_date",
-#           names(derived)[!names(derived) %in% names(sleep)])
-# derived <- derived[keep]
+# Identify last step before sleep onset ---------------------------------------
 
-# Merge
-# sleep <- full_join(sleep, derived,
-#                    by = c("user_id", "merge_date")) %>%
-#   clean_names()
-# print(names(sleep))
+ss <- ss %>%
+  lazy_dt() %>%
+  filter(value_time_tz < start_sleep_tz) %>%
+  group_by(user_id, sleep_day) %>%
+  arrange(user_id, sleep_day, desc(value_time_tz)) %>%
+  slice_head(n = 1) %>%
+  select(user_id, site, value_time_tz, steps, sleep_day, start_sleep_tz) %>%
+  as_tibble()
+
+# Derive sleep onset latency --------------------------------------------------
+
+sol <- ss
+sol$sol <- interval(sol$value_time_tz, sol$start_sleep_tz) / hours(1)
+hist(sol$sol, breaks = 1000)
+
+# Merge with other sleep measures ---------------------------------------------
+
+sleep <- sleep %>%
+  left_join(select(sol, user_id, sleep_day, sol),
+             by = c("user_id", "merge_date" = "sleep_day"))
 
 # Merge 3-monthly survey data with sleep data ---------------------------------
 

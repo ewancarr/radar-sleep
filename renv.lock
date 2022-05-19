@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.1.2",
+    "Version": "4.2.0",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -34,7 +34,7 @@
       "Package": "Matrix",
       "Version": "1.3-4",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "4ed05e9c9726267e4a5872e09c04587c"
     },
     "R6": {
@@ -489,7 +489,7 @@
       "Package": "insight",
       "Version": "0.15.0",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Hash": "c114a97acd6ee93c14b22512fa1ed3c5"
     },
     "isoband": {
@@ -545,7 +545,7 @@
       "Package": "lattice",
       "Version": "0.20-45",
       "Source": "Repository",
-      "Repository": "RSPM",
+      "Repository": "CRAN",
       "Hash": "b64cdbb2b340437c4ee047a1f4c4377b"
     },
     "lifecycle": {
