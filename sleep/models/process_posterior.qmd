@@ -1,0 +1,167 @@
+---
+title: "Process posteriors from sleep models"
+date: "2022-05-16"
+author: "Ewan Carr"
+format: html
+editor_options: 
+  chunk_output_type: console
+---
+
+Load packages/data:
+
+```{r}
+library(tidyverse)
+library(here)
+library(brms)
+library(tidybayes)
+library(scales)
+library(gtsummary)
+load(here("data", "clean", "merged.Rdata"), verbose = TRUE)
+load(here("data", "clean", "analytical_samples.Rdata"), verbose = TRUE)
+```
+
+Define sleep measures:
+
+```{r}
+trans <- c("c_tst_med", 
+           "c_cm3_tst_med", 
+           "log_tst_var",
+           "c_slpeff_med",
+           "c_sfi_med",
+           "hysom_ever",
+           "cm3_son_med",
+           "cm3_soff_med",
+           "log_son_rel_var",
+           "log_soff_rel_var",
+           "smid_med",
+           "log_smid_var",
+           "sjl")
+```
+
+# Binary models for RELAPSE
+
+Load models, extract posterior samples:
+
+```{r}
+load(here("samples_relb.Rdata"), verbose = TRUE)
+
+# For adjusted estimates only 
+post_relb <- map2_dfr(trans, fit_relb[14:26],
+                      ~ .y |>
+                        tidy_draws() |>
+                        gather_variables() |>
+                        filter(.variable %in% paste0("b_", trans)))
+```
+
+## Table: Odds ratios and 89% Credible Intervals
+
+```{r}
+post_relb |>
+  mutate(.value = exp(.value)) |>
+  group_by(.variable) |>
+  median_qi(.width = 0.89) |>
+  knitr::kable(digits = 2)
+```
+
+## Figure
+
+```{r}
+post_relb |>
+  ggplot() +
+    aes(y = .variable,
+        x = exp(.value),
+        fill = .variable,
+        color = .variable) +
+  stat_dots(side = "left",
+            point_colour = "black") +
+  stat_halfeye(.width = c(0.66, 0.89),
+               point_colour = "black",
+               interval_colour = "black") +
+  geom_vline(xintercept = 1, color = "red") +
+  scale_x_log10(n.breaks = 5) +
+  coord_cartesian(xlim = c(0.5, 2)) +
+  theme(legend.position = "none")
+```
+
+# Binary models for deterioration
+
+```{r}
+load(here("samples_det.Rdata"), verbose = TRUE)
+
+# For adjusted estimates only 
+post_det <- map2_dfr(trans, fit_det[14:26],
+                      ~ .y |>
+                        tidy_draws() |>
+                        gather_variables() |>
+                        filter(.variable %in% paste0("b_", trans)))
+```
+
+
+```{r}
+post_det |>
+  mutate(.value = exp(.value)) |>
+  group_by(.variable) |>
+  median_qi(.width = 0.89) |>
+  knitr::kable(digits = 2)
+```
+
+## Figure
+
+```{r}
+post_det |>
+  ggplot() +
+    aes(y = .variable,
+        x = exp(.value),
+        fill = .variable,
+        color = .variable) +
+  stat_dots(side = "left",
+            point_colour = "black") +
+  stat_halfeye(.width = c(0.66, 0.89),
+               point_colour = "black",
+               interval_colour = "black") +
+  geom_vline(xintercept = 1, color = "red") +
+  scale_x_log10(n.breaks = 5) +
+  coord_cartesian(xlim = c(0.5, 2)) +
+  theme(legend.position = "none")
+```
+
+# Linear models for IDS total score
+
+```{r}
+load(here("samples_ids.Rdata"), verbose = TRUE)
+
+post_ids <- map2_dfr(trans, fit_ids[14:26],
+                      ~ .y |>
+                        tidy_draws() |>
+                        gather_variables() |>
+                        filter(.variable %in% paste0("b_", trans)))
+```
+
+```{r}
+post_ids |>
+  group_by(.variable) |>
+  median_qi(.width = 0.89)
+```
+
+```{r}
+post_ids |>
+  ggplot() +
+    aes(y = .variable,
+        x = .value,
+        fill = .variable,
+        color = .variable) +
+  stat_dots(side = "left",
+            point_colour = "black") +
+  stat_halfeye(.width = c(0.66, 0.89),
+               point_colour = "black",
+               interval_colour = "black") +
+  geom_vline(xintercept = 0, color = "red") +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+conditional_effects(fit_ids[[15]], "c_cm3_tst_med")
+```
+
+# END.
