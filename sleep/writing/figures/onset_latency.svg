@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="210mm"
+   height="297mm"
+   viewBox="0 0 210 297"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.1.2 (0a00cf5339, 2022-02-04, custom)"
+   sodipodi:docname="onset_latency.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="1.4488348"
+     inkscape:cx="187.04686"
+     inkscape:cy="26.573078"
+     inkscape:window-width="3087"
+     inkscape:window-height="2114"
+     inkscape:window-x="753"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2">
+    <marker
+       style="overflow:visible"
+       id="TriangleInM"
+       refX="0.0"
+       refY="0.0"
+       orient="auto"
+       inkscape:stockid="TriangleInM"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.4)"
+         style="fill-rule:evenodd;fill:context-stroke;stroke:context-stroke;stroke-width:1.0pt"
+         d="M 5.77,0.0 L -2.88,5.0 L -2.88,-5.0 L 5.77,0.0 z "
+         id="path13943" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="marker16407"
+       refX="0.0"
+       refY="0.0"
+       orient="auto"
+       inkscape:stockid="TriangleOutM"
+       inkscape:isstock="true">
+      <path
+         transform="scale(0.4)"
+         style="fill-rule:evenodd;fill:context-stroke;stroke:context-stroke;stroke-width:1.0pt"
+         d="M 5.77,0.0 L -2.88,5.0 L -2.88,-5.0 L 5.77,0.0 z "
+         id="path16405" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="marker16397"
+       refX="0.0"
+       refY="0.0"
+       orient="auto"
+       inkscape:stockid="TriangleOutL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(0.8)"
+         style="fill-rule:evenodd;fill:context-stroke;stroke:context-stroke;stroke-width:1.0pt"
+         d="M 5.77,0.0 L -2.88,5.0 L -2.88,-5.0 L 5.77,0.0 z "
+         id="path16395" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL"
+       refX="0.0"
+       refY="0.0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill-rule:evenodd;fill:context-stroke;stroke:context-stroke;stroke-width:1.0pt"
+         d="M 5.77,0.0 L -2.88,5.0 L -2.88,-5.0 L 5.77,0.0 z "
+         id="path13940" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleOutM"
+       refX="0.0"
+       refY="0.0"
+       orient="auto"
+       inkscape:stockid="TriangleOutM"
+       inkscape:isstock="true">
+      <path
+         transform="scale(0.4)"
+         style="fill-rule:evenodd;fill:context-stroke;stroke:context-stroke;stroke-width:1.0pt"
+         d="M 5.77,0.0 L -2.88,5.0 L -2.88,-5.0 L 5.77,0.0 z "
+         id="path13952" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleOutL"
+       refX="0.0"
+       refY="0.0"
+       orient="auto"
+       inkscape:stockid="TriangleOutL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(0.8)"
+         style="fill-rule:evenodd;fill:context-stroke;stroke:context-stroke;stroke-width:1.0pt"
+         d="M 5.77,0.0 L -2.88,5.0 L -2.88,-5.0 L 5.77,0.0 z "
+         id="path13949" />
+    </marker>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:8.31735px;line-height:1.25;font-family:sans-serif;fill:#1a5fb4;fill-opacity:1;stroke:none;stroke-width:0.207934"
+       x="18.652994"
+       y="30.454414"
+       id="text2071"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123"><tspan
+         sodipodi:role="line"
+         id="tspan2069"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Arial;-inkscape-font-specification:Arial;stroke-width:0.207934;fill:#1a5fb4"
+         x="18.652994"
+         y="30.454414">Steps</tspan></text>
+    <rect
+       style="fill:#1a5fb4;stroke:none;stroke-width:0.432013;stop-color:#000000"
+       id="rect4974"
+       width="2.4039512"
+       height="8.5644999"
+       x="29.905552"
+       y="44.047153"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <rect
+       style="fill:#1a5fb4;stroke:none;stroke-width:0.432013;stop-color:#000000"
+       id="rect5126"
+       width="2.4039512"
+       height="8.5644999"
+       x="66.947227"
+       y="44.047153"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <rect
+       style="fill:#1a5fb4;stroke:none;stroke-width:0.432013;stop-color:#000000"
+       id="rect5128"
+       width="2.4039512"
+       height="8.5644999"
+       x="93.405563"
+       y="44.047153"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.71309px;line-height:1.25;font-family:Arial;-inkscape-font-specification:Arial;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-variant-east-asian:normal;font-feature-settings:normal;font-variation-settings:normal;text-indent:0;text-align:start;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;white-space:normal;opacity:1;vector-effect:none;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.142827;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000;stop-opacity:1"
+       x="157.88342"
+       y="92.751617"
+       id="text6342"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123"><tspan
+         sodipodi:role="line"
+         id="tspan6340"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.71309px;line-height:1.25;font-family:Arial;-inkscape-font-specification:Arial;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-variant-east-asian:normal;font-feature-settings:normal;font-variation-settings:normal;text-indent:0;text-align:start;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;white-space:normal;vector-effect:none;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.142827;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000;stop-opacity:1"
+         x="157.88342"
+         y="92.751617">02:00</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.71309px;line-height:1.25;font-family:Arial;-inkscape-font-specification:Arial;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-variant-east-asian:normal;font-feature-settings:normal;font-variation-settings:normal;text-indent:0;text-align:start;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;white-space:normal;opacity:1;vector-effect:none;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.142827;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000;stop-opacity:1"
+       x="12.022095"
+       y="93.422249"
+       id="text6478"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123"><tspan
+         sodipodi:role="line"
+         id="tspan6476"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.71309px;line-height:1.25;font-family:Arial;-inkscape-font-specification:Arial;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-variant-east-asian:normal;font-feature-settings:normal;font-variation-settings:normal;text-indent:0;text-align:start;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;white-space:normal;vector-effect:none;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.142827;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000;stop-opacity:1"
+         x="12.022095"
+         y="93.422249">12:00</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:8.31735px;line-height:1.25;font-family:sans-serif;fill:#c01c28;fill-opacity:1;stroke:none;stroke-width:0.207934"
+       x="18.464592"
+       y="63.865219"
+       id="text7472"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123"><tspan
+         sodipodi:role="line"
+         id="tspan7470"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Arial;-inkscape-font-specification:Arial;fill:#c01c28;stroke-width:0.207934"
+         x="18.464592"
+         y="63.865219">Sleep</tspan></text>
+    <rect
+       style="fill:#c01c28;stroke:none;stroke-width:1.19577;stop-color:#000000"
+       id="rect7480"
+       width="18.41745"
+       height="8.5644999"
+       x="147.1098"
+       y="77.913811"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       d="M 19.337733,52.528689 H 165.5574"
+       id="path857"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       d="M 19.337733,86.395353 H 165.5574"
+       id="path7476"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.51105px;line-height:1.05;font-family:Arial;-inkscape-font-specification:Arial;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-variant-east-asian:normal;font-feature-settings:normal;font-variation-settings:normal;text-indent:0;text-align:start;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;white-space:normal;opacity:1;vector-effect:none;fill:#e01b24;fill-opacity:1;stroke:none;stroke-width:0.137777;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000;stop-opacity:1"
+       x="110.41453"
+       y="70.344658"
+       id="text9386"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123"><tspan
+         sodipodi:role="line"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.51105px;font-family:Arial;-inkscape-font-specification:Arial;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-variant-east-asian:normal;font-feature-settings:normal;font-variation-settings:normal;text-indent:0;text-align:start;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;white-space:normal;vector-effect:none;fill:#e01b24;fill-opacity:1;stroke:none;stroke-width:0.137777;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000;stop-opacity:1"
+         x="110.41453"
+         y="70.344658"
+         id="tspan10184">Sleep onset</tspan></text>
+    <path
+       style="fill:none;stroke:#e01b24;stroke-width:0.465;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#TriangleOutM)"
+       d="m 138.41911,71.185434 c 0.0933,8.961829 6.59115,8.750324 6.59115,8.750324"
+       id="path13805"
+       sodipodi:nodetypes="cc"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <path
+       style="opacity:0.520327;fill:none;stroke:#77767b;stroke-width:0.765;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:3.06, 0.765;stroke-dashoffset:0;stroke-opacity:1"
+       d="M 146.72896,86.478307 V 24.485287"
+       id="path15516"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <path
+       style="opacity:0.520327;fill:none;stroke:#77767b;stroke-width:0.765;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:3.06, 0.765;stroke-dashoffset:0;stroke-opacity:1"
+       d="M 94.745098,86.478307 V 24.485287"
+       id="path15518"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <path
+       style="fill:none;stroke:#613583;stroke-width:0.965;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#TriangleInM);marker-end:url(#marker16407)"
+       d="m 97.557447,24.485287 46.226823,0"
+       id="path16373"
+       sodipodi:nodetypes="cc"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:6.11681px;line-height:1.25;font-family:Arial;-inkscape-font-specification:Arial;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-variant-east-asian:normal;font-feature-settings:normal;font-variation-settings:normal;text-indent:0;text-align:start;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;white-space:normal;opacity:1;vector-effect:none;fill:#613583;fill-opacity:1;stroke:none;stroke-width:0.15292;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000;stop-opacity:1"
+       x="101.75269"
+       y="18.969942"
+       id="text18112"
+       inkscape:export-filename="/home/ewan/Sync/Work/Projects/Active/RADAR sleep/repo/sleep/writing/figures/onset_latency.png"
+       inkscape:export-xdpi="300.07123"
+       inkscape:export-ydpi="300.07123"><tspan
+         sodipodi:role="line"
+         id="tspan18110"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:6.11681px;line-height:1.25;font-family:Arial;-inkscape-font-specification:Arial;font-variant-ligatures:normal;font-variant-position:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-alternates:normal;font-variant-east-asian:normal;font-feature-settings:normal;font-variation-settings:normal;text-indent:0;text-align:start;text-decoration-line:none;text-decoration-style:solid;text-decoration-color:#000000;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;text-orientation:mixed;dominant-baseline:auto;baseline-shift:baseline;white-space:normal;vector-effect:none;fill:#613583;fill-opacity:1;stroke:none;stroke-width:0.15292;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;-inkscape-stroke:none;stop-color:#000000;stop-opacity:1"
+         x="101.75269"
+         y="18.969942">Onset latency</tspan></text>
+  </g>
+</svg>
