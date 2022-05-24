@@ -9,12 +9,22 @@ library(cmdstanr)
 library(tidybayes)
 library(scales)
 library(gtsummary)
-n_iter <- 4000
+n_iter <- 1e4
+n_thin <- 10
 verbose <- FALSE
 set_cmdstan_path("~/.cmdstan/cmdstan-2.29.2")
-options(mc.cores = 2,
-        brms.backend = "cmdstanr",
-        brms.chains = 4)
+
+host <- Sys.info()[["nodename"]]
+if (host == "air") {
+  options(mc.cores = 2,
+          brms.backend = "cmdstanr",
+          brms.chains = 4)
+} else if (host == "opti") {
+  options(mc.cores = 16,
+          brms.backend = "cmdstanr",
+          threads = threading(4),
+          brms.chains = 4)
+}
 
 # Functions -------------------------------------------------------------------
 
@@ -35,6 +45,14 @@ med_summary <- function(x) {
   return(str_glue("{mea} | {med} [{iqr_lo}, {iqr_hi}] ({n_complete}/{n_total})"))
 }
 
+cc <- function(x) {
+  # Function to collapse a vector of covariates into formula
+  if (x[1] == "") {
+    return("") 
+  } else {
+    return(paste0(" + ", paste(x, collapse = " + ")))
+  }
+}
 
 # Load data, analytical sample ------------------------------------------------
 load(here("data", "clean", "merged.Rdata"), verbose = TRUE)
@@ -46,7 +64,7 @@ sleep_vars <- c("tst_med",      # Total sleep time, median
                 "cm3_tst_med",  # Total sleep time, change in median
                 "tst_var",      # Total sleep time, variance
                 "slpeff_med",   # Sleep efficiency, median
-                # TODO          # Sleep onset latency, median
+                "sol_med",      # Sleep onset latency, median
                 "sfi_med",      # Sleep fragmentation index, median
                 "hysom_ever",   # Any days sleeping >= 10 hours
                 "cm3_son_med",  # Sleep onset, change this month vs. 3m ago
@@ -56,11 +74,11 @@ sleep_vars <- c("tst_med",      # Total sleep time, median
                 "smid_med",     # Sleep midpoint, median this month
                 "smid_var",     # Sleep midpoint, variance around median this month
                 "sjl")          # Social jet lag
-id <- c("pid", "t")
-covariates <- c("age", "male")
+id <- c("user_id", "pid", "t")
+covariates <- c("age", "male", "atyp")
 outcomes <- c("relb", "det", "ids_total", "lag_ids_total")
 
-dat <- select(merged, all_of(c(id, outcomes, sleep_vars, covariates)))
+dat <- merged |> ungroup() |> select(all_of(c(id, outcomes, sleep_vars, covariates)))
 
 # Table summarising analytical samples ----------------------------------------
 
@@ -78,7 +96,7 @@ if (FALSE) {
 
 continuous_vars <- c("age", "tst_med", "cm3_tst_med", "slpeff_med", "sfi_med",
                      "hysom_ever", "cm3_son_med", "cm3_soff_med", "smid_med",
-                     "sjl", "tst_var", "smid_var", "son_", "rel_off")
+                     "sjl", "tst_var", "smid_var", "son_med", "rel_off")
 
 if (verbose) {
   dat |>
@@ -110,6 +128,7 @@ trans <- c("c_tst_med",
            "cm3_soff_med",
            "log_son_rel_var",
            "log_soff_rel_var",
+           "log_sol_med",
            "smid_med",
            "log_smid_var",
            "sjl")
@@ -125,20 +144,24 @@ cov <- c("cz_age", "male")
 d_s1 <- filter(dat, user_id %in% s1)
 print_n(d_s1)
 
-fit_lr <- function(.form, ...) {
-  brm(formula = .form,
-      family = bernoulli(),
-      prior = set_prior("normal(0, 1.5)", class = "b"),
-      ...) |>
-  add_criterion("loo")
+construct_formula <- function(.y, .x, .adj) {
+  return(as.formula(str_glue("{.y} ~ {.x}{cc(.adj)} + (1 | pid)")))
 }
 
-construct_formula <- function(.y, .x, .adj, ...) {
-  cov <- ifelse(.adj[1] == "",
-                "",
-                paste0(" + ", paste(.adj, collapse = " + ")))
-  cat("Fitting model: ", .y, " ~ ", .x, cov, "\n")
-  return(fit_lr(str_glue("{.y} ~ {.x}{cov} + (1 | pid)"), ...))
+fit_brm <- function(.form, type = "lr", ...) {
+  if (type == "lr") {
+    fam <- bernoulli()
+    p <- set_prior("normal(0, 1.5)", class = "b")
+  } else if (type == "lin") {
+    fam <- gaussian()
+    p <- set_prior("normal(0, 2)", class = "b")
+  }
+  brm(formula = .form, family = fam, prior = p, 
+      control = list(adapt_delta = 0.999,
+                     stepsize = 0.01,
+                     max_treedepth = 15),
+      ...) |>
+    add_criterion("loo")
 }
 
 # Specify models
@@ -146,17 +169,15 @@ models_relb <- cross(list(y = "relb",
                           x = trans,
                           adj = list("", cov)))
 
-
 # Fit models
 fit_relb <- map(models_relb, function(i) {
-                  construct_formula(.y   = i$y,
-                                    .x   = i$x,
-                                    .adj = i$adj,
-                                    data = d_s1,
-                                    thin = 10,
-                                    iter = 10000) })
+                  fit_brm(.form = construct_formula(i$y, i$x, i$adj),
+                          type = "lr",
+                          data = d_s1,
+                          iter = n_iter,
+                          thin = n_thin) })
 
-save(fit_relb, file = here("samples_relb.Rdata"))
+save(fit_relb, file = here("sleep", "models", "samples", "samples_relb.Rdata"))
 
 ###############################################################################
 ####                                                                      #####
@@ -173,16 +194,14 @@ models_det <- cross(list(y = "det",
                           adj = list("", cov)))
 
 # Fit models ------------------------------------------------------------------
-fit_det <- map(models_det,
-               function(i) {
-                 construct_formula(.y = i$y,
-                                   .x = i$x,
-                                   .adj = i$adj,
-                                   data = d_s2,
-                                   iter = 10000,
-                                   thin = 10) })
+fit_det <- map(models_det, function(i) {
+                 fit_brm(.form = construct_formula(i$y, i$x, i$adj),
+                         type = "lr",
+                         data = d_s2,
+                         iter = n_iter,
+                         thin = n_thin) })
 
-save(fit_det, file = here("samples_det.Rdata"))
+save(fit_det, file = here("sleep", "models", "samples", "samples_det.Rdata"))
 
 ###############################################################################
 ####                                                                      #####
@@ -190,27 +209,47 @@ save(fit_det, file = here("samples_det.Rdata"))
 ####                                                                      #####
 ###############################################################################
 
-construct_lm <- function(.x, .adj, ...) {
-  cov <- ifelse(.adj[1] == "",
-                "",
-                paste0(" + ", paste(.adj, collapse = " + ")))
-  return(brm(str_glue("ids_total ~ lag_ids_total + {.x}{cov} + (1 | pid)"), ...))
-}
-
 # Specify models --------------------------------------------------------------
 
-models_ids <- cross(list(x = trans, adj = list("", cov)))
+models_ids <- cross(list(y = "ids_total",
+                         x = trans, 
+                         adj = list("lag_ids_total", c(cov, "lag_ids_total"))))
 
 # Fit models ------------------------------------------------------------------
 
 fit_ids <- map(models_ids, function(i) {
-                 construct_lm(.x = i$x,
-                              .adj = i$adj,
-                              data = d_s2,
-                              iter = 10000,
-                              thin = 10) })
+                 fit_brm(.form = construct_formula(i$y, i$x, i$adj),
+                         type = "lin",
+                         data = d_s2,
+                         iter = n_iter,
+                         thin = n_thin) })
 
-save(fit_ids, file = here("samples_ids.Rdata"))
+save(fit_ids, file = here("sleep", "models", "samples", "samples_ids.Rdata"))
+
+###############################################################################
+####                                                                      #####
+####               Test interaction with depression subtype               #####
+####                                                                      #####
+###############################################################################
+
+opts <- cross(list(x = trans,
+                   y = c("relb", "det", "ids_total")))
+
+fit_inter <- opts |>
+  map(function(i) {
+      adj <- c("cz_age", "male")
+      ty <- "lr"
+      if (i$y == "ids_total") { adj <- c(adj, "lag_ids_total"); ty <- "lin" }
+      .data <- d_s2
+      if (i$y == "relb") { .data <- d_s1 }
+      m_wo <- fit_brm(as.formula(str_glue("{i$y} ~ {i$x}{cc(adj)} + atyp + (1 | pid)")),
+                      type = ty, data = .data, iter = n_iter, thin = n_thin)
+      m_wi <- fit_brm(as.formula(str_glue("{i$y} ~ {i$x}{cc(adj)} + atyp + atyp:{i$x} + (1 | pid)")),
+                      type = ty, data = .data, iter = n_iter, thin = n_thin)
+      return(list(wo = m_wo, wi = m_wi)) 
+  })
+
+save(fit_inter, file = here("sleep", "models", "samples", "samples_inter.Rdata"))
 
 ###############################################################################
 ####                                                                      #####
@@ -218,4 +257,4 @@ save(fit_ids, file = here("samples_ids.Rdata"))
 ####                                                                      #####
 ###############################################################################
 
-save(d_s1, d_s2, file = here("analytical_data.Rdata"))
+save(d_s1, d_s2, file = here("data", "clean", "analytical_data.Rdata"))
