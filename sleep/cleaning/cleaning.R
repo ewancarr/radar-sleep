@@ -327,7 +327,7 @@ sleep$stop_sleep <- extract_dt(sleep$sleep_offset,
                                sleep$sleep_day + days(sleep$next_day))
 
 # Identify site 
-sleep <- sleep %>%
+sleep <- sleep |>
   mutate(site = case_when(project_id == "RADAR-MDD-CIBER-S1" ~ "CIBER",
                           project_id == "RADAR-MDD-CIBER-s1" ~ "CIBER",
                           project_id == "RADAR-MDD-VUmc-s1" ~ "VUmc",
@@ -335,58 +335,77 @@ sleep <- sleep %>%
                           TRUE ~ NA_character_))
 
 # Export lookup, used when processing FitBit step data
-days <- sleep %>%
+days <- sleep |>
   select(user_id = participant_name,
          site,
-         sleep_day) %>%
+         sleep_day) |>
   distinct()
 
 save(days, file = here("data", "clean", "days_lookup.Rdata"))
+
+# -----------------------------------------------------------------------------
+# --------------------------- SLEEP ONSET LATENCY -----------------------------
+# -----------------------------------------------------------------------------
 
 # Load FitBit steps data ------------------------------------------------------
 
 # Load pre-processed step data
 load(here("data", "clean", "step_data.Rdata"), verbose = TRUE)
 
-# Fix time zones in steps data
-steps <- steps %>%
-  left_join(distinct(sleep, user_id, site)) %>%
-  mutate(value_time_tz = case_when(site == "CIBER" ~ force_tz(value_time, tz = "Europe/London"),
-                                   site == "VUmc" ~ force_tz(value_time, tz = "Europe/London"),
-                                   site == "KCL" ~ force_tz(value_time, tz = "Europe/London")))
+# NOTE: It's important to get the time zones right here. Specifically, we need:
+#      
+#      ┌──────── CIBER ────────┐  ┌─────── VUmc ────────────┐
+#      │ Steps: UTC            │  │ Steps: UTC              │
+#      │ Sleep: Europe/Madrid  │  │ Sleep: Europe/Amsterdam │
+#      └───────────────────────┘  └─────────────────────────┘
+#                                                            
+#                    ┌───────── KCL ─────────┐               
+#                    │ Steps: Europe/London  │               
+#                    │ Sleep: Europe/London  │               
+#                    └───────────────────────┘
 
-# Fix time zones in 'sleep features' dataset # TODO: still WIP
-sleep <- sleep %>% 
-  mutate(start_sleep_tz = case_when(site == "CIBER" ~ force_tz(start_sleep, tz = "Europe/London"),  # Madrid
-                                    site == "VUmc" ~ force_tz(start_sleep, tz = "Europe/London"),  # Amsterdam
-                                    site == "KCL" ~ force_tz(start_sleep, tz = "Europe/London")))
+# Fix time zones in steps data
+steps <- steps |>
+  left_join(distinct(sleep, user_id, site)) |>
+  mutate(value_time_tz = case_when(
+    site == "CIBER" ~ force_tz(value_time, tz = "UTC"),
+    site == "VUmc" ~ force_tz(value_time, tz = "UTC"),
+    site == "KCL" ~ force_tz(value_time, tz = "Europe/London")
+    ))
+
+# Fix time zones in 'sleep features' data
+sleep <- sleep |> 
+  mutate(start_sleep_tz = case_when(
+    site == "CIBER" ~ force_tz(start_sleep, tz = "Europe/Madrid"), 
+    site == "VUmc" ~ force_tz(start_sleep, tz = "Europe/Amsterdam"),  # Amsterdam
+    site == "KCL" ~ force_tz(start_sleep, tz = "Europe/London")
+    ))
+
 sleep_onset <- select(sleep,
                       user_id, site, sleep_day, start_sleep, start_sleep_tz)
 
-
 # Merge step data with sleep onset
-ss <- inner_join(steps, sleep_onset, by = c("site", "user_id", "sleep_day"))
+ss <- inner_join(steps, sleep_onset, by = c("site", "user_id", "sleep_day")) 
 
 # Identify last step before sleep onset ---------------------------------------
 
-ss <- ss %>%
-  lazy_dt() %>%
-  filter(value_time_tz < start_sleep_tz) %>%
-  group_by(user_id, sleep_day) %>%
-  arrange(user_id, sleep_day, desc(value_time_tz)) %>%
-  slice_head(n = 1) %>%
-  select(user_id, site, value_time_tz, steps, sleep_day, start_sleep_tz) %>%
+ss <- ss |>
+  lazy_dt() |>
+  filter(value_time_tz < start_sleep_tz) |>
+  group_by(user_id, sleep_day) |>
+  arrange(user_id, sleep_day, desc(value_time_tz)) |>
+  slice_head(n = 1) |>
+  select(user_id, site, value_time_tz, steps, sleep_day, start_sleep_tz) |>
   as_tibble()
 
 # Derive sleep onset latency --------------------------------------------------
 
 sol <- ss
 sol$sol <- interval(sol$value_time_tz, sol$start_sleep_tz) / hours(1)
-hist(sol$sol, breaks = 1000)
 
 # Merge with other sleep measures ---------------------------------------------
 
-sleep <- sleep %>%
+sleep <- sleep |>
   left_join(select(sol, user_id, sleep_day, sol),
              by = c("user_id", "merge_date" = "sleep_day"))
 
