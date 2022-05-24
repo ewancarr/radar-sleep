@@ -21,7 +21,7 @@ check_overlap <- function(df_left, df_right,
                        in_left = TRUE),
             data.frame(right = unique(df_right[[id_right]]),
                        in_right = TRUE),
-            by = c("left" = "right")) %>%
+            by = c("left" = "right")) |>
   count(in_left, in_right)
 }
 
@@ -38,15 +38,15 @@ which_event <- function(x) {
 }
 
 
-survey <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) %>%
+survey <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) |>
     rename(user_id = subject_id,
            event = redcap_event_name,
            fut = Followuptime,
            psu = PSSUQ_TOTAL,
            eth = ETHCAT2,
            tam = TAM_TOTAL,
-           ids_date = IDSdate) %>%
-    clean_names() %>%
+           ids_date = IDSdate) |>
+    clean_names() |>
     mutate(
         event = which_event(event),
         t = as.numeric(event),
@@ -69,18 +69,18 @@ survey <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) %>%
         ),
         prevwear = as.numeric(fitness_tracker_used),
         bame = if_else(is.na(eth), NA, as.numeric(eth) %in% 2:5)
-    ) %>%
+    ) |>
     drop_na(pid, t, fut)
 
 # Get IDS items from larger survey dataset ------------------------------------
 
-ids_items <- read_dta(here("data", "raw", "totaldataset.dta")) %>%
+ids_items <- read_dta(here("data", "raw", "totaldataset.dta")) |>
   select(user_id = subject_id,
          event = redcap_event_name,
-         starts_with("ids_")) %>%
+         starts_with("ids_")) |>
   mutate(event = which_event(event),
-         t = as.numeric(event)) %>%
-  rowwise() %>%
+         t = as.numeric(event)) |>
+  rowwise() |>
   mutate(# Atypical depression ------------------------------------------------
          # 1. Mood reactivity (ids_8 = 0, 1, 2)
          mood_reactivity = ids_8 %in% 0:2,
@@ -108,30 +108,30 @@ ids_items <- read_dta(here("data", "raw", "totaldataset.dta")) %>%
                         (ids_16 %in% 2:3)),
          melancholic_depression = mood_reactivity & (num_trues >= 3))
 
-survey <- ids_items %>%
+survey <- ids_items |>
   select(user_id,
          t = event,
          atypical_depression,
-         melancholic_depression) %>%
-  mutate(t = as.numeric(t)) %>%
+         melancholic_depression) |>
+  mutate(t = as.numeric(t)) |>
   right_join(survey, 
              by = c("user_id", "t"))
 
 # Get other measures from REDCAP.dta ------------------------------------------
 
-redcap <- read_dta(here("data", "raw", "REDCAP data.dta")) %>%
+redcap <- read_dta(here("data", "raw", "REDCAP data.dta")) |>
   mutate(t = case_when(str_detect(redcap_event_name, "enrolment_arm_1") ~ 0,
-                       TRUE ~ parse_number(redcap_event_name))) %>%
+                       TRUE ~ parse_number(redcap_event_name))) |>
   rename(user_id = subject_id)
 
-outcomes <- redcap %>%
+outcomes <- redcap |>
   select(user_id,
          redcap_event_name,
          contains("relapse"),
-         contains("deterioration_2SDs")) %>%
+         contains("deterioration_2SDs")) |>
   pivot_longer(!c(user_id, redcap_event_name),
                names_to = "measure",
-               values_to = "value") %>%
+               values_to = "value") |>
   mutate(y = case_when(str_detect(measure, "deterioration_2SDs") ~ "det",
                        str_detect(measure, "relapseordeterioration") ~ "relordet",
                        str_detect(measure, "relapseanddeterioration") ~ "relanddet",
@@ -153,28 +153,28 @@ outcomes <- redcap %>%
                        str_detect(measure, "18m$") ~ 18,
                        str_detect(measure, "21m$") ~ 21,
                        str_detect(measure, "24m$") ~ 24,
-                       TRUE ~ NA_real_)) %>%
+                       TRUE ~ NA_real_)) |>
   drop_na(measure, t, y, value)
 
 # Important: make sure we're only using the relapse/deterioration variable 
 #            [WIDE format] from the corresponding month [LONG format].
 
-outcomes <- outcomes %>%
-  mutate(m_row = parse_number(redcap_event_name)) %>%
+outcomes <- outcomes |>
+  mutate(m_row = parse_number(redcap_event_name)) |>
   filter(t == m_row)
 
 # Check: ensure that each participant has a single, unique value of 'relapse'
 # at each time point? 
 
-outcomes %>%
-  group_by(user_id, t, y) %>%
-  summarise(single_value = length(unique(value)) == 1) %>%
+outcomes |>
+  group_by(user_id, t, y) |>
+  summarise(single_value = length(unique(value)) == 1) |>
   filter(!single_value)
 
 # Reshape back to WIDE
-outcomes <- outcomes %>%
-  filter(y %in% c("rel", "det")) %>%
-  select(user_id, t, y, value) %>%
+outcomes <- outcomes |>
+  filter(y %in% c("rel", "det")) |>
+  select(user_id, t, y, value) |>
   pivot_wider(id_cols = c("user_id", "t"),
               names_from = "y",
               values_from = "value")
@@ -186,16 +186,16 @@ table(unique(survey$user_id) %in% unique(redcap$user_id))
 # --> Yep.
 
 # Check observations match:
-a <- distinct(outcomes, user_id, t) %>% mutate(from_a = "outcomes")
-b <- distinct(survey, user_id, t) %>% mutate(from_b = "survey")
-full_join(a, b) %>% 
-  filter(t > 0) %>%
-  arrange(user_id, t) %>%
+a <- distinct(outcomes, user_id, t) |> mutate(from_a = "outcomes")
+b <- distinct(survey, user_id, t) |> mutate(from_b = "survey")
+full_join(a, b) |> 
+  filter(t > 0) |>
+  arrange(user_id, t) |>
   count(is.na(from_a) | is.na(from_b))
 # --> All but 2, which is OK for now.
 # TODO: query.
 
-survey <- survey %>%
+survey <- survey |>
   full_join(outcomes, by = c("user_id", "t"))
 
 print(length(unique(survey$user_id)))
@@ -208,7 +208,7 @@ print(length(unique(survey$user_id)))
 
 # Create lookup table (this was then sent to Matthew for checking)
 med_lookup <- read_csv(here("data", "raw",
-                            "medications", "medkey_complete.csv")) %>%
+                            "medications", "medkey_complete.csv")) |>
   distinct(original, correct)
 
 # Load Matthew's categories
@@ -218,9 +218,9 @@ cat_matthew <- read_csv(here("data", "raw", "medications",
                         col_names = c("medication_name", "cat_matthew"))
 
 # Get medication data from REDCAP
-meds <- redcap %>%
-  select(user_id, t, starts_with("csri_6")) %>%
-  rename(med_name = csri_6_1_1) %>%
+meds <- redcap |>
+  select(user_id, t, starts_with("csri_6")) |>
+  rename(med_name = csri_6_1_1) |>
   mutate(med_name = na_if(med_name, ""))
 
 # Check: are all medications in the lookup table?
@@ -230,14 +230,14 @@ table(not_found)
 # Check: which are missing?
 paste(na.omit(meds$med_name[not_found]))
   
-meds <- meds %>%
-  left_join(med_lookup, by = c("med_name" = "original")) %>%
-  left_join(cat_matthew, by = c("correct" = "medication_name")) %>%
+meds <- meds |>
+  left_join(med_lookup, by = c("med_name" = "original")) |>
+  left_join(cat_matthew, by = c("correct" = "medication_name")) |>
   select(user_id, t, med_name, correct, medication_category = cat_matthew)
 
 # Create simplified measures --------------------------------------------------
 
-meds <- meds %>%
+meds <- meds |>
   mutate(meds_mdd = medication_category %in% c("antidepressant",
                                                "antipsychotic",
                                                "anticonvulsant",
@@ -258,26 +258,26 @@ survey <- left_join(survey,
 
 ## Check survey respondents missing IDS date ----------------------------------
 
-missing_dates <- survey %>%
-  group_by(user_id, t) %>%
-  summarise(n_missing = sum(is.na(ids_date))) %>%
-  filter(n_missing > 0) %>%
-  spread(t, n_missing) %>%
+missing_dates <- survey |>
+  group_by(user_id, t) |>
+  summarise(n_missing = sum(is.na(ids_date))) |>
+  filter(n_missing > 0) |>
+  spread(t, n_missing) |>
   mutate(across(`0`:`15`, replace_na, 0))
 head(missing_dates)
 
 ## Import missing dates (from Faith via email) --------------------------------
 
-fixed_dates <- read_csv(here("data", "raw", "fixed_dates.csv")) %>%
-  rename(user_id = subject_id) %>%
-  gather(t, ids_date, -user_id) %>%
-  filter(ids_date != 0) %>%
+fixed_dates <- read_csv(here("data", "raw", "fixed_dates.csv")) |>
+  rename(user_id = subject_id) |>
+  gather(t, ids_date, -user_id) |>
+  filter(ids_date != 0) |>
   mutate(ids_date = dmy(ids_date),
          t = as.numeric(t))
 
-survey <- survey %>%
-  mutate(ids_date = ymd(ids_date)) %>%
-  full_join(fixed_dates, by = c("user_id", "t")) %>%
+survey <- survey |>
+  mutate(ids_date = ymd(ids_date)) |>
+  full_join(fixed_dates, by = c("user_id", "t")) |>
   mutate(ids_date = coalesce(ids_date.x, ids_date.y))
 
 table(is.na(survey$ids_date))
@@ -296,7 +296,7 @@ p <- here("data", "raw", "radarV1_MDD", "csv_files")
 sleep <- read_csv(paste0(p, "/dailyFeatures_fitbit_sleep.csv"))
 te <- read_csv(paste0(p, "/timeIntervals.csv"))
 sleep <- left_join(sleep, te,
-                   by = c("time_interval" = "timeInterval_ID")) %>%
+                   by = c("time_interval" = "timeInterval_ID")) |>
   clean_names()
 sleep$merge_date <- sleep$datetime_start
 
@@ -417,18 +417,18 @@ add_sleep <- function(survey_data,
                       w_start = -2,  # Start of window, offset from survey date
                       w_end = 0      # End of window, offset from survey date
                       ) {
-  lookup <- survey_data %>%
+  lookup <- survey_data |>
     select(ids_date, 
            t,
-           user_id) %>%
+           user_id) |>
     mutate(win_start = ids_date + weeks(w_start),
-           win_end = ids_date + weeks(w_end)) %>%
-    drop_na(win_start, win_end) %>%
-    group_by(user_id) %>%
-    group_split() %>%
-    map_dfr(expand_individual) %>%
+           win_end = ids_date + weeks(w_end)) |>
+    drop_na(win_start, win_end) |>
+    group_by(user_id) |>
+    group_split() |>
+    map_dfr(expand_individual) |>
     as_tibble()
-  with_sleep <- lookup %>%
+  with_sleep <- lookup |>
     left_join(sleep_data, by = c("user_id", "merge_date"))
   return(with_sleep) 
 }
