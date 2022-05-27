@@ -55,7 +55,7 @@ B = Change, past 4 weeks (this survey period) versus past 4 weeks (last survey p
 
 # Details
 
-Most of the above measures are taken directly from WP8 or Dan (/dailyFeatures_fitbit_sleep.csv`) -- I've just summarised for the relevant 4-week periods.
+Most of the above measures are taken directly from WP8 or Dan (`dailyFeatures_fitbit_sleep.csv`) -- I've just summarised for the relevant 4-week periods.
 
 The exception is **sleep onset latency**. We've calculated this by:
 
