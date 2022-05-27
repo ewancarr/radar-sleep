@@ -19,11 +19,12 @@ if (host == "air") {
   options(mc.cores = 2,
           brms.backend = "cmdstanr",
           brms.chains = 4)
+  n_thread <- threading(1)
 } else if (host == "opti") {
-  options(mc.cores = 16,
+  options(mc.cores = 20,
           brms.backend = "cmdstanr",
-          threads = threading(4),
           brms.chains = 4)
+  n_thread <- threading(5)
 }
 
 # Functions -------------------------------------------------------------------
@@ -52,6 +53,11 @@ cc <- function(x) {
   } else {
     return(paste0(" + ", paste(x, collapse = " + ")))
   }
+}
+
+make_names <- function(i) {
+    is_adjusted <- ifelse(length(i$adj) == 1, "unadj", "adj")
+    return(str_glue("{i$y}__{i$x}__{is_adjusted}"))
 }
 
 # Load data, analytical sample ------------------------------------------------
@@ -160,6 +166,7 @@ fit_brm <- function(.form, type = "lr", ...) {
       control = list(adapt_delta = 0.999,
                      stepsize = 0.01,
                      max_treedepth = 15),
+      threads = n_thread,
       ...) |>
     add_criterion("loo")
 }
@@ -177,6 +184,7 @@ fit_relb <- map(models_relb, function(i) {
                           iter = n_iter,
                           thin = n_thin) })
 
+names(fit_relb) <- map(models_relb, make_names)
 save(fit_relb, file = here("sleep", "models", "samples", "samples_relb.Rdata"))
 
 ###############################################################################
@@ -201,6 +209,7 @@ fit_det <- map(models_det, function(i) {
                          iter = n_iter,
                          thin = n_thin) })
 
+names(fit_det) <- map(models_det, make_names)
 save(fit_det, file = here("sleep", "models", "samples", "samples_det.Rdata"))
 
 ###############################################################################
@@ -210,13 +219,13 @@ save(fit_det, file = here("sleep", "models", "samples", "samples_det.Rdata"))
 ###############################################################################
 
 # Specify models --------------------------------------------------------------
-
 models_ids <- cross(list(y = "ids_total",
                          x = trans, 
                          adj = list("lag_ids_total", c(cov, "lag_ids_total"))))
 
-# Fit models ------------------------------------------------------------------
 
+
+# Fit models ------------------------------------------------------------------
 fit_ids <- map(models_ids, function(i) {
                  fit_brm(.form = construct_formula(i$y, i$x, i$adj),
                          type = "lin",
@@ -224,6 +233,7 @@ fit_ids <- map(models_ids, function(i) {
                          iter = n_iter,
                          thin = n_thin) })
 
+names(fit_ids) <- map(models_ids, make_names)
 save(fit_ids, file = here("sleep", "models", "samples", "samples_ids.Rdata"))
 
 ###############################################################################
@@ -248,6 +258,8 @@ fit_inter <- opts |>
                       type = ty, data = .data, iter = n_iter, thin = n_thin)
       return(list(wo = m_wo, wi = m_wi)) 
   })
+
+names(fit_inter) <- map_chr(opts, ~ str_glue("{.x$y}__{.x$x}"))
 
 save(fit_inter, file = here("sleep", "models", "samples", "samples_inter.Rdata"))
 

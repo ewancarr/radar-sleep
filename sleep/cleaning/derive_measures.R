@@ -9,6 +9,7 @@ library(lubridate)
 library(naniar)
 library(janitor)
 library(data.table)
+verbose <- FALSE
 
 load(here("data", "clean", "opts.Rdata"), verbose = TRUE)
 
@@ -76,13 +77,12 @@ sel <- sel[tst == longest, head(.SD, 1), by = .(user_id, merge_date)]
 # Check: this should contain 0 rows
 sel[, by = .(user_id, merge_date), count := .N][count > 1, ]
 
-sel <- as_tibble(sel)
 
 # Derive some measures --------------------------------------------------------
 
-sel$tst <- sel$tst / 3600               # Total sleep time (minutes --> hours)
-sel$tib <- sel$tib / 3600               # Time in bed (minutes --> hours)
-sel$sfi <- sel$awak / sel$tst           # Sleep Fragmentation Index (SFI)
+sel$tst <- sel$tst / 3600              # Total sleep time (minutes --> hours)
+sel$tib <- sel$tib / 3600              # Time in bed (minutes --> hours)
+sel$sfi <- sel$awak / sel$tst          # Sleep Fragmentation Index (SFI)
 sel$smid <- derive_midpoint(sel$start_sleep, sel$stop_sleep)
 
 # Relative sleep onset/offset -------------------------------------------------
