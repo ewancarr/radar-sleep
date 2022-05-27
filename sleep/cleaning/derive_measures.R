@@ -100,6 +100,13 @@ clock_diff <- function(i) {
   return(min(c(d_fw, d_bw)))
 }
 
+tdiff <- function(i) {
+  start_time <- as.POSIXct(i[[1]] * 3600, origin = i[1])
+  end_time <- as.POSIXct(i[[2]] * 3600, origin = i[2])
+  return(as.numeric(difftime(start_time,
+                             end_time,
+                             units = "hours"))) 
+}
 
 clock_diff <- function(i) {
   # This isn't pretty, but...
@@ -113,15 +120,15 @@ clock_diff <- function(i) {
   # ii.   'a' is day before 'b'
   # iii.  'b' is day before 'a'
   # The function then returns the smallest absolute interval
-  opts <- list(i = c("2021-01-01", "2021-01-01"),
-               ii = c("2021-01-01", "2021-01-02"),
-               iii = c("2021-01-02", "2021-01-01"))
-  res <- map_dbl(opts, function(o) {
-                   start_time <- as.POSIXct(i[[1]] * 3600, origin = o[1])
-                   end_time <- as.POSIXct(i[[2]] * 3600, origin = o[2])
-                   return(as.numeric(difftime(start_time,
-                                              end_time,
-                                              units = "hours"))) })
+  opts <- list(c("2021-01-01", "2021-01-01"),   # i.
+               c("2021-01-01", "2021-01-02"),   # ii.
+               c("2021-01-02", "2021-01-01"))   # iii.
+  res <- vector(length = 3)
+  for (o in seq_along(opts)) {
+    end_time <- as.POSIXct(i[1] * 3600, origin = opts[[o]][1])
+    start_time <- as.POSIXct(i[2] * 3600, origin = opts[[o]][2])
+    res[o] <- as.numeric(difftime(start_time, end_time, units = "hours"))
+  }
   return(as.numeric(res[which(abs(res) == min(abs(res)))])[1])
 }
 
@@ -141,11 +148,12 @@ if (verbose) {
       labs(x = "T1", y = "T2")
 }
 
-sel <- sel |>
-  group_by(user_id, t) |>
-  mutate(# Calculate median onset/offset per monthly period
-         son_med = median(son, na.rm = TRUE),
-         soff_med = median(soff, na.rm = TRUE))
+# Calculate median onset/offset per monthly period
+sel[, by = .(user_id, t),
+    c("son_med", "soff_med") := .(median(son, na.rm = TRUE),
+                                  median(soff, na.rm = TRUE))]
+
+# Calculate relative onset/offset
 sel$son_rel <- apply(sel[, c("son", "son_med")], 1, clock_diff)
 sel$soff_rel <- apply(sel[, c("soff", "soff_med")], 1, clock_diff)
 
@@ -154,18 +162,16 @@ sel$soff_rel <- apply(sel[, c("soff", "soff_med")], 1, clock_diff)
 # Absolute value of the difference in the midpoint of sleep times between
 # weekdays and weekends.
 
-sjl <- sel |>
-  mutate(day_label = lubridate::wday(merge_date, label = TRUE),
-         weekend = if_else(day_label %in% c("Fri", "Sat"), "wkend", "wkday")) |>
-  group_by(user_id, t, weekend) |>
-  summarise(mid_sjl = mean(smid, na.rm = TRUE)) |>
-  select(user_id, t, weekend, mid_sjl) |>
-  pivot_wider(names_from = "weekend",
-              values_from = "mid_sjl") |>
-  mutate(sjl = wkend - wkday) |>
-  select(user_id, t, sjl)
+sjl <- sel
+sjl$day_label <- lubridate::wday(sjl$merge_date, label = TRUE)
+sjl$weekend <- sjl$day_label %in% weekend
+sjl <- sjl[order(user_id, t)][, .(mid_sjl = mean(smid, na.rm = TRUE)), by = .(user_id, t, weekend)]
+sjl <- sjl[, .(user_id, t, weekend, mid_sjl)]
+sjl <- dcast(sjl, ... ~ weekend, value.var = "mid_sjl")
+sjl[, sjl := `TRUE` - `FALSE`]
 
-sel <- left_join(sel, sjl, by = c("user_id", "t"))
+sjl <- as_tibble(sjl[, .(user_id, t, sjl)])
+sel <- left_join(as_tibble(sel), sjl, by = c("user_id", "t"))
 
 # Summarise sleep measures for this time period -------------------------------
 
@@ -301,15 +307,12 @@ merged <- filter(merged, orig & !is.na(user_id))
 ####                                                                      #####
 ###############################################################################
 
+# NOTE: if subtype is missing, use PREVIOUS non-missing value for participant
 merged <- merged |>
-  mutate(subtype = case_when(melancholic_depression & atypical_depression ~ "Both",
-                             melancholic_depression ~ "Melancholic",
-                             atypical_depression ~ "Atypical",
-                             TRUE ~ "Neither"),
-         subtype = factor(subtype, levels = c("Neither",
-                                              "Atypical",
-                                              "Melancholic",
-                                              "Both")))
+  arrange(user_id, t) |>
+  group_by(user_id, t) |>
+  fill(atypical_depression, .direction = "up") |>
+  rename(atyp = atypical_depression)
 
 ###############################################################################
 ####                                                                      #####
