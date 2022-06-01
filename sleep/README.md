@@ -37,21 +37,24 @@ A = Past 4 weeks
 
 B = Change, past 4 weeks (this survey period) versus past 4 weeks (last survey period). 
 
-| Variable       | Label                             | Comment                                                      | When |
-| -------------- | --------------------------------- | ------------------------------------------------------------ | ---- |
-| `tst_med`      | Total sleep time, median          | Weekdays only.                                               | A    |
-| `tst_var`      | Total sleep time, variance        | Weekdays only.                                               | A    |
-| `slp_eff_med`  | Sleep efficiency, median          | Percentage of total sleep time to time in bed. Weekdays only. | A    |
-| `sol_med`      | Sleep onset latency, median       | Time between last FitBit step and 'sleep onset'. Weekdays only. | A    |
-| `sfi_med`      | Sleep fragmentation index, median | Number of awakenings per hour sleep. Weekdays only.          | A    |
-| `hysom_ever`   | Any days sleeping 10+ hours       | Weekdays only.                                               | A    |
-| `cm3_son_med`  | Sleep onset, change in median     | **Positive** values indicate sleep onset is **later** this survey period, compared to last. Weekdays only. | B    |
-| `cm3_soff_med` | Sleep offset, change in median    | As above.                                                    | B    |
-| `son_rel_var`  | Relative sleep onset, variance    | Variance around participant's median sleep onset, past 4 weeks. Weekdays only. | A    |
-| `soff_rel_var` | Relative sleep offset, variance.  | As above. Weekdays only.                                     | A    |
-| `smid_med`     | Sleep midpoint, median            | Clock time. Weekdays only.                                   | A    |
-| `smid_var`     | Sleep midpoint, variance          | Variance around participant's median sleep midpoint, past 4 weeks. Weekdays only. | A    |
-| `sjl`          | Social jet lag                    | Absolute value of the difference in the midpoint of sleep times between weekdays and weekends. | A    |
+| Variable         | Label                               | Comment                                                      | When |
+| ---------------- | ----------------------------------- | ------------------------------------------------------------ | ---- |
+| `tst_med`        | Total sleep time, median            | Weekdays only.                                               | A    |
+| `cm3_tst_med`    | Total sleep time, change in median. | Weekdays only.                                               | B    |
+| `tst_var`        | Total sleep time, variance          | Weekdays only.                                               | A    |
+| `slpeff_med`     | Sleep efficiency, median            | Percentage of total sleep time to time in bed. Weekdays only. | A    |
+| `cm3_slpeff_med` | Sleep efficiency, change in median  |                                                              | B    |
+| `sol_med`        | Sleep onset latency, median         | Time between last FitBit step and 'sleep onset'. Weekdays only. | A    |
+| `sol_var`        | Sleep onset latency, variance       | Weekdays only.                                               | A    |
+| `sfi_med`        | Sleep fragmentation index, median   | Number of awakenings per hour sleep. Weekdays only.          | A    |
+| `hysom_ever`     | Any days sleeping 10+ hours         | Weekdays only.                                               | A    |
+| `cm3_son_med`    | Sleep onset, change in median       | **Positive** values indicate sleep onset is **later** this survey period, compared to last. Weekdays only. | B    |
+| `cm3_soff_med`   | Sleep offset, change in median      | As above.                                                    | B    |
+| `son_rel_var`    | Relative sleep onset, variance      | Variance around participant's median sleep onset, past 4 weeks. Weekdays only. | A    |
+| `soff_rel_var`   | Relative sleep offset, variance.    | As above. Weekdays only.                                     | A    |
+| `smid_med`       | Sleep midpoint, median              | Clock time. Weekdays only.                                   | A    |
+| `smid_var`       | Sleep midpoint, variance            | Variance around participant's median sleep midpoint, past 4 weeks. Weekdays only. | A    |
+| `sjl`            | Social jet lag                      | Absolute value of the difference in the midpoint of sleep times between weekdays and weekends. | A    |
 
 # Details
 
