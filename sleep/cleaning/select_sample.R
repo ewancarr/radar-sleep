@@ -5,37 +5,13 @@
 library(tidyverse)
 library(here)
 library(naniar)
-load(here("data", "clean", "merged.Rdata"), verbose = TRUE)
+load(here("data", "clean", "for_modelling.Rdata"), verbose = TRUE)
 
-# Export list of user IDs
-write_lines(unique(merged$user_id),
-            here("data", "raw", "synology", "users.txt"))
-
-# Check available sample with information on outcomes/sleep -------------------
-
-n_avail <- function(data, ...) {
-  d <- drop_na(data, ...) 
-  return(list(n_part = length(unique(d$user_id)),
-              n_obs = nrow(d)))
+print_n <- function(d, id = "user_id") {
+  cat("\n\nParticipants: ", length(unique(d[[id]])),
+      "\nObservations: ", nrow(d), "\n\n")
+  return(d)
 }
-
-avail <- list(`Total` = list(n_part = length(unique(merged$user_id)),
-                             n_obs = nrow(merged)),
-              `With relapse` = n_avail(merged, relb),
-              `With deterioration` = n_avail(merged, det),
-              `With IDS total score` = n_avail(merged, ids_total),
-              `With total sleep time` = n_avail(merged, tst_med),
-              `With change in total sleep time` = n_avail(merged, cm3_tst_med),
-              `With relapse AND change in sleep time` = n_avail(merged, relb, cm3_tst_med),
-              `With IDS score AND sleep time` = n_avail(merged, ids_total, tst_med),
-              `With IDS score AND change in sleep time` = n_avail(merged, ids_total, cm3_tst_med)) %>%
-  map_dfr(~ .x, .id = "label")
-
-avail %>%
-  rename(` ` = label,
-         `No. participants` = n_part,
-         `No. observations` = n_obs) %>%
-  gt::gt()
 
 check_n <- function(d, var) {
   d <- drop_na(d, {{var}})
@@ -43,7 +19,9 @@ check_n <- function(d, var) {
       "\nObservations: ", nrow(d), "\n\n")
 }
     
-
+# Export list of user IDs
+write_lines(unique(merged$user_id),
+            here("data", "raw", "synology", "users.txt"))
 
 ###############################################################################
 ####                                                                      #####
@@ -51,52 +29,38 @@ check_n <- function(d, var) {
 ####                                                                      #####
 ###############################################################################
 
-covariates <- c("age", "male")
-
-# Sample A: Relapse -----------------------------------------------------------
+# Sample 1: Relapse -----------------------------------------------------------
 
 # Must have at least one measure of relapse, across time points (i.e. 3 monthly surveys).
 # Must have measure of sleep (and change in sleep) at each time point.
 # Must have required covariates (just age and sex for now) at each time point.
 
-s1 <- merged |>
-  drop_na(relb, 
-          tst_med,
-          cm3_tst_med,
+d1 <- dat |>
+  drop_na(rel_mod,
+          all_of(trans),
           all_of(covariates)) |>
-  pluck("user_id") |>
-  unique()
+  print_n() |>
+  mutate(samp = "d1")
 
-# Sample B: Deterioration -----------------------------------------------------
+# Sample 2: Deterioration and IDS severity ------------------------------------
 
-# Must have at least one measure of deterioration, across time points (i.e. 3 monthly surveys).
-# Must have measure of sleep (and change in sleep) at each time point.
-# Must have required covariates (just age and sex for now) at each time point.
+# NOTE: we have identical number with 'det' and 'ids_total'. So, combining 
+# these into a single sample.
 
-s2 <- merged |>
+# * Must have at least one measure:
+#    - Deterioration (det)
+#    - IDS severity (ids_total) and lagged IDS severity (lag_ids_total)
+# At each time point.
+# * Must sleep measures (and change in sleep) at each time point.
+# * Must have required covariates at each time point.
+
+d2 <- dat |>
   drop_na(det, 
-          tst_med,
-          cm3_tst_med,
+          all_of(trans),
           all_of(covariates)) |>
-  pluck("user_id") |>
-  unique()
-
-# Sample C: IDS score ---------------------------------------------------------
-
-# Must have at least one measure of IDS total score, across time points (i.e. 3 monthly surveys).
-# Must have provided IDS total score at the previous 3-monthly survey.
-# Must have measure of sleep (and change in sleep) at each time point.
-# Must have required covariates (just age and sex for now) at each time point.
-
-s3 <- merged |>
-  drop_na(ids_total,
-          lag_ids_total,
-          tst_med,
-          cm3_tst_med,
-          all_of(covariates)) |>
-  pluck("user_id") |>
-  unique()
+  print_n() |>
+  mutate(samp = "d2")
 
 # Save ------------------------------------------------------------------------
 
-save(s1, s2, s3, file = here("data", "clean", "analytical_samples.Rdata"))
+save(d1, d2, file = here("data", "clean", "analytical_samples.Rdata"))

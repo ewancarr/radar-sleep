@@ -9,9 +9,12 @@ library(lubridate)
 library(naniar)
 library(janitor)
 library(data.table)
+library(future.apply)
+plan(multicore)
 verbose <- FALSE
 
 load(here("data", "clean", "opts.Rdata"), verbose = TRUE)
+source(here("sleep", "functions.R"))
 
 derive_midpoint <- function(start, stop) {
   half <- round(0.5 * (interval(start, stop) / minutes(1)))
@@ -28,17 +31,20 @@ sleep_data <- opts$last_month
 # Select only observations with minimum required days of data -----------------
 
 # NOTE: this is set to a minimum number of WEEKDAYS.
+min_days <- 5
 
-min_days <- 7
-
-sel <- sleep_data |>
+# Count the number of days per 3-monthly period
+n_days <- sleep_data |>
   group_by(user_id, t) |>
   drop_na(total_sleep_time) |>
-  summarise(n_weekdays = sum(!(lubridate::wday(unique(merge_date), label = TRUE) %in% weekend)),
-            n_days = length(unique(merge_date))) |>
-  filter(n_weekdays >= min_days) |>
-  left_join(sleep_data, by = c("user_id", "t"))
-  
+  summarise(n_weekdays = sum(!(lubridate::wday(unique(merge_date),
+                                               label = TRUE) %in% weekend)),
+            n_days = length(unique(merge_date)))
+
+sel <- n_days |> 
+  right_join(sleep_data, by = c("user_id", "t")) |>
+  filter(n_weekdays >= min_days)
+
 # Select/rename required variables --------------------------------------------
 
 sel <- select(sel,
@@ -68,7 +74,8 @@ sel <- select(sel,
 # Not ideal, but arguably better than combining sleep events, esp. when it 
 # isn't straightforward (e.g. the mean of two sleep onsets).
 
-sel <- na.omit(sel, cols = c("user_id", "merge_date", "tst"))
+sel <- drop_na(sel, user_id, merge_date, tst)
+
 setDT(sel)[,
            c("n_events", "longest") := .(.N, max(tst, na.rm = TRUE)),
            by = .(user_id, merge_date)]
@@ -77,13 +84,26 @@ sel <- sel[tst == longest, head(.SD, 1), by = .(user_id, merge_date)]
 # Check: this should contain 0 rows
 sel[, by = .(user_id, merge_date), count := .N][count > 1, ]
 
-
-# Derive some measures --------------------------------------------------------
+# Total sleep time / time in bed ----------------------------------------------
 
 sel$tst <- sel$tst / 3600              # Total sleep time (minutes --> hours)
 sel$tib <- sel$tib / 3600              # Time in bed (minutes --> hours)
-sel$sfi <- sel$awak / sel$tst          # Sleep Fragmentation Index (SFI)
+
+# Sleep fragmentation index ---------------------------------------------------
+
+sel$sfi <- sel$awak / sel$tst
+
+# Sleep midpoint --------------------------------------------------------------
+
 sel$smid <- derive_midpoint(sel$start_sleep, sel$stop_sleep)
+# Trim extreme values
+sel$smid <- winsor(sel$smid, c(0, 10))
+
+# Sleep onset/offset ----------------------------------------------------------
+
+sel$son_scaled <- ifelse(sel$son < 12,
+                         sel$son + 12,
+                         sel$son - 12)
 
 # Relative sleep onset/offset -------------------------------------------------
 
@@ -154,8 +174,8 @@ sel[, by = .(user_id, t),
                                   median(soff, na.rm = TRUE))]
 
 # Calculate relative onset/offset
-sel$son_rel <- apply(sel[, c("son", "son_med")], 1, clock_diff)
-sel$soff_rel <- apply(sel[, c("soff", "soff_med")], 1, clock_diff)
+sel$son_rel <- future_apply(sel[, c("son", "son_med")], 1, clock_diff)
+sel$soff_rel <- future_apply(sel[, c("soff", "soff_med")], 1, clock_diff)
 
 # Social Jet Lag --------------------------------------------------------------
 
@@ -165,37 +185,74 @@ sel$soff_rel <- apply(sel[, c("soff", "soff_med")], 1, clock_diff)
 sjl <- sel
 sjl$day_label <- lubridate::wday(sjl$merge_date, label = TRUE)
 sjl$weekend <- sjl$day_label %in% weekend
-sjl <- sjl[order(user_id, t)][, .(mid_sjl = mean(smid, na.rm = TRUE)), by = .(user_id, t, weekend)]
+sjl <- sjl[order(user_id, t)][, .(mid_sjl = mean(smid, na.rm = TRUE)),
+                              by = .(user_id, t, weekend)]
 sjl <- sjl[, .(user_id, t, weekend, mid_sjl)]
 sjl <- dcast(sjl, ... ~ weekend, value.var = "mid_sjl")
 sjl[, sjl := `TRUE` - `FALSE`]
 
-sjl <- as_tibble(sjl[, .(user_id, t, sjl)])
-sel <- left_join(as_tibble(sel), sjl, by = c("user_id", "t"))
+# Winsorize extreme values
+sjl$sjl <- winsor(sjl$sjl, c(-5, 5))
+
+# Merge with other sleep measures
+sjl <- na.omit(sjl, cols = c("user_id", "t", "sjl"))
+sel <- merge(sel, sjl, all.x = TRUE, by = c("user_id", "t"))
+
+# Awake at 2am ----------------------------------------------------------------
+
+# (Not sure if we're using this).
+
+sel$awake_2am <- (lubridate::hour(sel$start_sleep) < 2) & 
+                 (lubridate::hour(sel$stop_sleep) > 2)
+
 
 # Summarise sleep measures for this time period -------------------------------
 
-sleep_vars <- sel |>
-  # DECIDE: only summarise weekday sleep, or use all days? --------------------
-  filter(!(lubridate::wday(merge_date, label = TRUE) %in% weekend)) |>
-  group_by(user_id, t) |>
-  mutate(awake_at_2am = hour(start_sleep) < 2 & hour(stop_sleep) > 2) |>
-  summarise(sjl = first(na.omit(sjl)),
-            hysom_ever = max(hysom, na.rm = TRUE),
-            across(c(tst, tib, slpeff, sol, sfi, awak, smid),
-                   median,
-                   na.rm = TRUE,
-                   .names = "{.col}_med"),
-            across(c(sol, tst, tib, slpeff, son_rel, soff_rel),
-                   var, na.rm = TRUE,
-                   .names = "{.col}_var"),
-            sri = mean(awake_at_2am, na.rm = TRUE),
-            smid_var = var(smid - smid_med),  
-            across(c(son_med, soff_med), first)) |>
-  arrange(user_id, t)
+# Select weekdays only
+sel$day <- as.character(lubridate::wday(sel$merge_date, label = TRUE))
+sel <- sel[!(day %chin% weekend)]
 
-# The above function derives sleep measures in the last month of each 
-# 3-monthly window:
+# Derive 'median sleep midpoint', needed when summarising, below.
+sel[, by = .(user_id, t), smid_med := median(smid, na.rm = TRUE)]
+
+# Summarise sleep measures for each period (t), per person (user_id).
+sleep_vars <- sel[,
+                  by = .(user_id, t),
+                  .(# First non-missing value
+                    sjl = first(na.omit(sjl)),
+                    # Maximum 
+                    hysom_ever = max(hysom, na.rm = TRUE),
+                    # Median
+                    tst_med = median(tst, na.rm = TRUE),
+                    tib_med = median(tib, na.rm = TRUE),
+                    son_med = median(son, na.rm = TRUE),
+                    son_scaled_med = median(son_scaled, na.rm = TRUE),
+                    soff_med = median(soff, na.rm = TRUE),
+                    slpeff_med = median(slpeff, na.rm = TRUE),
+                    sol_med = median(sol, na.rm = TRUE),
+                    sfi_med = median(sfi, na.rm = TRUE),
+                    awak_med = median(awak, na.rm = TRUE),
+                    smid_med = median(smid, na.rm = TRUE),
+                    # Variance
+                    tst_var = var(tst, na.rm = TRUE),
+                    tib_var = var(tib, na.rm = TRUE),
+                    slpeff_var = var(slpeff, na.rm = TRUE),
+                    son_rel_var = var(son_rel, na.rm = TRUE),
+                    soff_rel_var = var(soff_rel, na.rm = TRUE),
+                    son_var = var(son, na.rm = TRUE),
+                    soff_var = var(soff, na.rm = TRUE),
+                    smid_rel_var = var(smid - smid_med, na.rm = TRUE),  
+                    sol_var = var(sol, na.rm = TRUE),
+                    # Mean
+                    sri = mean(awake_2am, na.rm = TRUE)
+                    )
+                  ]
+sleep_vars <- sleep_vars[order(user_id, t)]
+
+sleep_vars <- as_tibble(sleep_vars)
+
+# The above code derives sleep measures in the last month of each 3-monthly
+# window:
 # 
 #     T1                           T2
 #     │                            │
@@ -216,7 +273,6 @@ sleep_vars <- sel |>
 #       Previous                      Current
 #        window                        window
 #
-
 
 ###############################################################################
 ####                                                                      #####
@@ -240,36 +296,39 @@ sleep_vars <- sel |>
 # 2. A modified definition, that requires participants in remission to also
 #    have an IDS score of <= 25. 
 # 
-# ╔══════════════╦═══════════════════════════════╦══════════════════════════════════════╗
-# ║              ║ Original definition           ║ Modified definition                  ║
-# ╠══════════════╬═══════════════════════════════╬══════════════════════════════════════╣
-# ║ y = 1        ║ Meeting criteria for CIDI-SF  ║ The same.                            ║
-# ║              ║ AND scoring > 25 on IDS SR    ║                                      ║
-# ╠══════════════╬═══════════════════════════════╬══════════════════════════════════════╣
-# ║ y = 0        ║ Not meeting criteria for      ║ Not meeting criteria for relapse     ║
-# ║              ║ relapse (i.e. everyone else). ║ AND scoring ≤ 25 on IDS-SR           ║
-# ╠══════════════╬═══════════════════════════════╬══════════════════════════════════════╣
-# ║ y = Excluded ║ None.                         ║ Not meeting criteria for relapse AND ║
-# ║              ║                               ║  scoring > 25 on IDS-SR              ║
-# ╚══════════════╩═══════════════════════════════╩══════════════════════════════════════╝
-
-# Derive alternative outcome measures -----------------------------------------
-
-survey <- survey |>
-  group_by(user_id, t) |>
-  mutate(relb = case_when(rel == 0 & ids_total <= 25 ~ 0,
-                          rel == 1 & ids_total > 25 ~ 1,
-                          TRUE ~ NA_real_))
+# ════════ ══════════════════════════════ ═════════════════════════════════════
+#          Original definition             Modified definition                 
+# ════════ ══════════════════════════════ ═════════════════════════════════════
+#  y = 1   Meeting criteria for CIDI-SF    The same.                           
+#          AND scoring > 25 on IDS SR                                          
+# ════════ ══════════════════════════════ ═════════════════════════════════════
+#  y = 0   Not meeting criteria for        Not meeting criteria for relapse    
+#          relapse (i.e. everyone else).   AND scoring ≤ 25 on IDS-SR          
+# ════════ ══════════════════════════════ ═════════════════════════════════════
+#  y = NA  None.                           Not meeting criteria for relapse AND
+#                                           scoring > 25 on IDS-SR             
+# ════════ ══════════════════════════════ ═════════════════════════════════════
 
 # Merge sleep measures with survey data ---------------------------------------
 
 merged <- survey |>
-  select(user_id, t, age, male, edyrs, wsas, gad,
-         ids_total, rel, relb, det,
+  select(user_id, 
+         t,
+         age,
+         male,
+         edyrs,
+         partner,
+         gad,
+         ids_total,
+         rel,
+         det,
+         starts_with("meds_"),
          medication_category,
          melancholic_depression,
          atypical_depression) |>
   group_by(user_id) |>
+  arrange(user_id, t) |>
+  fill(partner) |>
   mutate(across(c(male, edyrs), ~ dplyr::first(na.omit(.x))),
          age = min(age, na.rm = TRUE),
          age_this_window = age + (t / 12)) |>
@@ -288,19 +347,76 @@ merged <- tidyr::expand(merged, t = seq(3, 24, 3)) |>
   full_join(merged, by = c("user_id", "t")) |>
   arrange(user_id, t) |>
   mutate(# For some variable, calculate raw change (i.e. current minus lagged)
-         across(c(sjl, tst_med, tib_med, slpeff_med,
-                  sol_med, sfi_med, awak_med,
-                  hysom_ever, sol_var, tst_var,
+         across(c(sjl, 
+                  tst_med, tst_var,
+                  tib_med, 
+                  slpeff_med,
+                  sol_med, sol_var,
+                  smid_med,
+                  son_rel_var, soff_rel_var,
+                  son_var, soff_var, 
+                  sfi_med, 
+                  awak_med,
+                  hysom_ever,
                   ids_total), 
                 ~ .x - dplyr::lag(.x), .names = "cm3_{.col}"),
-         lag_ids_total = dplyr::lag(ids_total, 1),
          across(c(ids_total, son_med, soff_med), dplyr::lag, 1,
-                .names = "lag_{.col}"),
-         across(starts_with("cm3_"), ~ abs(.x), .names = "{.col}_abs"))
-merged$cm3_son_med <- apply(merged[, c("lag_son_med", "son_med")], 1, clock_diff)
-merged$cm3_soff_med <- apply(merged[, c("lag_soff_med", "soff_med")], 1, clock_diff)
+                .names = "lag_{.col}"))
+
+# For others, calcuate difference in clock time
+merged$cm3_son_med <- future_apply(merged[, c("lag_son_med", "son_med")],
+                                   1, clock_diff)
+merged$cm3_soff_med <- future_apply(merged[, c("lag_soff_med", "soff_med")],
+                                    1, clock_diff)
+
+# Remove extra rows created by "expand", above.
 merged <- filter(merged, orig & !is.na(user_id))
 
+# Trim some extreme values ----------------------------------------------------
+
+# Winsorize change in sleep offset
+merged$cm3_soff_med <- winsor(merged$cm3_soff_med, c(-4, 4))
+
+merged$sol_var <- ifelse(merged$sol_var == 0, 0.001, merged$sol_var)
+merged$smid_rel_var <- ifelse(merged$smid_rel_var == 0, 0.001, merged$smid_rel_var)
+
+# Create standardised sleep measures ------------------------------------------
+
+
+###############################################################################
+####                                                                      #####
+####                          Depression outcomes                         #####
+####                                                                      #####
+###############################################################################
+
+merged <- merged |>
+  group_by(user_id, t) |>
+  mutate(rel = as.logical(rel),
+   rel_mod = case_when( # Modified relapse definition -------------------------
+   rel  & ids_total > 25   ~ 1,         # Meets relapse, current IDS > 25.
+   rel  & ids_total <= 25  ~ -99,       # Meets relapse, current IDS ≤ 25.
+   !rel & ids_total <= 25  ~ 0,         # No relapse, current IDS ≤ 25.
+   !rel & ids_total > 25   ~ NA_real_), # No relapse, current IDS > 25
+   rel_3cat = case_when( # 3-category relapse outcome -------------------------
+   rel  & ids_total > 25   ~ 2,
+   rel  & ids_total <= 25  ~ -99,
+   !rel & ids_total <= 25  ~ 0,
+   !rel & ids_total > 25   ~ 1),
+ rel_5cat = case_when(# 5-category relapse outcome ----------------------------
+   !rel & ids_total <= 25 & lag_ids_total <= 25 ~ 0,
+   !rel & ids_total <= 25 & lag_ids_total  > 25 ~ 1,
+   !rel & ids_total  > 25 & lag_ids_total <= 25 ~ 2,
+   !rel & ids_total  > 25 & lag_ids_total  > 25 ~ 3,
+   rel                                          ~ 4))
+
+merged$rel_5cat <- factor(merged$rel_5cat,
+                          levels = 0:4,
+                          labels = c("No change, low symptoms",
+                                     "Improvement",
+                                     "Worsening",
+                                     "No change, high symptoms",
+                                     "Relapse"))
+  
 ###############################################################################
 ####                                                                      #####
 ####                          Depression subtypes                         #####

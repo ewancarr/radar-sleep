@@ -12,6 +12,7 @@ library(data.table)
 library(dtplyr)
 library(dplyr, warn.conflicts = FALSE)
 library(tidyverse)
+source(here("sleep", "functions.R"))
 
 # Functions -------------------------------------------------------------------
 
@@ -247,7 +248,8 @@ meds <- meds |>
          meds_other = !is.na(medication_category) & !(meds_mdd | meds_sleep))
 
 survey <- left_join(survey,
-                    select(meds, user_id, t, medication_category),
+                    select(meds, user_id, t,
+                           medication_category, starts_with("meds_")),
                     by = c("t", "user_id"))
 
 ###############################################################################
@@ -398,10 +400,14 @@ ss <- ss |>
   select(user_id, site, value_time_tz, steps, sleep_day, start_sleep_tz) |>
   as_tibble()
 
+
 # Derive sleep onset latency --------------------------------------------------
 
 sol <- ss
 sol$sol <- interval(sol$value_time_tz, sol$start_sleep_tz) / hours(1)
+
+# Winsorize extreme values
+sol$sol <- winsor(sol$sol, c(0, 4))
 
 # Merge with other sleep measures ---------------------------------------------
 
