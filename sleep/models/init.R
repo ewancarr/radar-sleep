@@ -84,7 +84,9 @@ sleep_vars <- c(# Total sleep time
                 "hysom_ever",
                 # Sleep midpoint
                 "smid_med",     # median this month
-                "smid_rel_var", # variance around median this month
+                "smid_var",     # variance around median this month
+                "cm3_smid_med", # change in median
+                "cm3_smid_var", # change in variance
                 # Social jet lag
                 "sjl")
 id <- c("user_id", "pid", "t")
@@ -122,34 +124,29 @@ dat <- bind_cols(dat, transformed)
 
 # Select transformations to use in models -------------------------------------
 
-trans <- c("z_tst_med",          # median
-           "zlog_tst_var",       # variance
-           "z_cm3_tst_med",      # change in median
-           "z_cm3_tst_var",      # change in variance
-           # Sleep onset (clock time)
-           "z_cm3_son_med",      # change this month vs. 3m ago
-           "z_son_scaled_med",   # median (scaled)
-           "zlog_son_rel_var",   # variance in relative sleep onset
-           # Sleep offset (clock time)
-           "z_cm3_soff_med",     # change in median, this month vs. 3m ago
-           "z_soff_med",         # median
-           "zlog_soff_rel_var",  # variance in relative sleep offset
+trans <- c(# Sleep duration (4 measures) ======================================
+           # Total sleep time
+           "z_tst_med",          # median (1)
+           "zlog_tst_var",       # variance (2)
+           # Change in total sleep time
+           "z_cm3_tst_med",      # median (3)
+           "z_cm3_tst_var",      # variance (4)
+           # Sleep quality (4 measures) =======================================
            # Sleep efficiency
-           "z_slpeff_med",       # median
-           # Sleep onset latency
-           "z_sol_med",          # median
-           "zlog_sol_var",       # variance
-           "z_cm3_sol_med",      # change in median
-           "z_cm3_sol_var",      # change in variance
+           "z_slpeff_med",       # median (1)
            # Sleep fragmentation index
-           "z_sfi_med",          # median
-           # Any days sleeping >= 10 hours
-           "hysom_ever",
+           "z_sfi_med",          # median (2)
+           # Sleep onset latency
+           "z_sol_med",          # median (3)
+           "zlog_sol_var",       # variance (4)
+           # Sleep regularity (5 measures) ====================================
            # Sleep midpoint
-           "z_smid_med",         # median this month
-           "zlog_smid_rel_var",  # variance around median this month
+           "z_smid_med",         # median this month (1)
+           "zlog_smid_rel_var",  # variance around median this month (2)
+           "z_cm3_smid_med",     # change in median (3)
+           "z_cm3_smid_var",     # change in variance (4)
            # Social jet lag
-           "z_sjl")
+           "z_sjl")              # (5)
 
 zcov <- c("z_age", "male",
           "meds_mdd", "meds_other", "meds_sleep",

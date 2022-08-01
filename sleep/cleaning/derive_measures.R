@@ -97,7 +97,7 @@ sel$sfi <- sel$awak / sel$tst
 
 sel$smid <- derive_midpoint(sel$start_sleep, sel$stop_sleep)
 # Trim extreme values
-sel$smid <- winsor(sel$smid, c(0, 10))
+sel$smid <- winsor(sel$smid, c(0, 12))
 
 # Sleep onset/offset ----------------------------------------------------------
 
@@ -242,6 +242,7 @@ sleep_vars <- sel[,
                     son_var = var(son, na.rm = TRUE),
                     soff_var = var(soff, na.rm = TRUE),
                     smid_rel_var = var(smid - smid_med, na.rm = TRUE),  
+                    smid_var = var(smid, na.rm = TRUE),  
                     sol_var = var(sol, na.rm = TRUE),
                     # Mean
                     sri = mean(awake_2am, na.rm = TRUE)
@@ -352,7 +353,7 @@ merged <- tidyr::expand(merged, t = seq(3, 24, 3)) |>
                   tib_med, 
                   slpeff_med,
                   sol_med, sol_var,
-                  smid_med,
+                  smid_med, smid_var,
                   son_rel_var, soff_rel_var,
                   son_var, soff_var, 
                   sfi_med, 
