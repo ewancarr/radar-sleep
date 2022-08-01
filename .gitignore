@@ -9,3 +9,5 @@ repo.Rproj
 **/.DS_Store
 .Rproj.user
 *.Rdata
+/sleep/reference
+/sleep/models/processed

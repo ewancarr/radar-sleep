@@ -9,7 +9,10 @@ library(gt)
 library(gtsummary)
 library(ggExtra)
 library(patchwork)
+library(naniar)
 load(here("data", "clean", "merged.Rdata"), verbose = TRUE)
+
+
 
 ###############################################################################
 ####                                                                      #####
@@ -19,15 +22,19 @@ load(here("data", "clean", "merged.Rdata"), verbose = TRUE)
 
 sel <- drop_na(merged, ids_total, tst_med)
 
-tab_demo <- merged %>%
+length(unique(sel$user_id))
+
+tab_demo <- sel %>%
   ungroup() %>%
-  select(age_at_enrolment, male, edyrs, ids_total, relb, det) %>%
+  select(age_at_enrolment, male, edyrs, ids_total, relb, det,
+         medication_category, subtype) %>%
   tbl_summary(label = list(age_at_enrolment ~ "Age at enrolment",
                            male ~ "Male gender",
                            edyrs ~ "Years of education",
                            ids_total ~ "IDS total score",
                            relb ~ "Relapse (0/1)",
-                           det ~ "Deterioration (0/1)"),
+                           det ~ "Deterioration (0/1)",
+                           medication_category = "Medications"),
               missing = "no",
               statistic = list(all_continuous() ~ "{median} ({p25}, {p75})",
                                all_categorical() ~ "{n} ({p}%)")) %>%
@@ -35,46 +42,67 @@ tab_demo <- merged %>%
         col_label = "**No. available**",
         last = TRUE)
 
+tab_demo
+
+# Number of participants/assessments ------------------------------------------
+
+p <- sel %>%
+  ungroup() %>%
+  count(user_id, name = "no_obs") %>%
+  count(no_obs, name = "no_part") %>%
+  ggplot() +
+  aes(x = no_obs,
+      y = no_part) +
+  geom_col() +
+  theme_minimal(base_family = "Calibri") +
+  scale_x_continuous(breaks = 1:8) +
+  labs(x = "Number of assessments",
+       y = "No. participants")
+ggsave(p,
+       filename = here("sleep", "writing", "figures", "n_assess.png"),
+       dev = "png",
+       width = 7,
+       height = 5)
+
+
+n_obs <- sel %>%
+  filter(t > 0) %>%
+  ungroup() %>%
+  count(t)
+
+sum(n_obs)
+length(unique(sel$user_id))
+
+n_obs %>%
+  write_csv("~/tab.csv")
+
+
 
 ###############################################################################
 ####                                                                      #####
-####                                Figures                               #####
+####                            Sleep measures                            #####
 ####                                                                      #####
 ###############################################################################
 
-make_plot <- function(data, v, label) {
-  plot_data <- data[, c(str_glue("{v}_med"), str_glue("{v}_var"))]
-  plot_data <- drop_na(plot_data)
-  names(plot_data) <- c("x", "y")
-  p <- ggplot(plot_data) +
-    aes(x = x, y = y) +
-    geom_point(alpha = 0.2) +
-    geom_smooth() + 
-    labs(title = str_glue("{label}; n = {nrow(plot_data)}"),
-         x = str_glue("Median (across 7 days)"),
-         y = str_glue("Variance (across 7 days)"))
-  return(ggMarginal(p, type = "histogram", fill = "white"))
-}
+# Table summarising sleep measures --------------------------------------------
 
-p1 <- make_plot(merged, "slpeff", "Sleep efficiency")
-p2 <- make_plot(merged, "tst", "Total sleep time")
-p3 <- make_plot(merged, "sol", "Sleep onset latency")
-
-labels <- tribble(~var,         ~label,                                ~group,              ~index,
-                  "tst_med",    "Total sleep time (median)",           "A. Sleep duration", 1,
-                  "tib_med",    "Time in bed (median)",                "A. Sleep duration", 2,
-                  "slpeff_med", "Sleep efficiency (median)",           "B. Sleep quality",  3,
-                  "sol_med",    "Sleep onset latency (median)",        "B. Sleep quality",  4,
-                  "sfi_med",    "Sleep fragmentation index (median)",  "C. Fragmentation",  5,
-                  "insom_prop", "Probable insomnia (proportion)",      "C. Fragmentation",  6,
-                  "hysom_prop", "Probable hypersomnia (proportion)",   "C. Fragmentation",  7,
-                  "son_var",    "Sleep onset (variance)",              "D. Regularity",     8,
-                  "son_var",    "Sleep onset (median)",                "D. Regularity",     9,
-                  "soff_var",   "Sleep offset (variance)",               "D. Regularity",   10,
-                  "smid_var",   "Sleep midpoint variance",             "D. Regularity",     11,
-                  "sjl",        "Social jet lag (hours)",              "D. Regularity",     12,
-                  "sri",        "Sleep regularity index (proportion)", "D. Regularity",     13)
-
+labels <- tribble(~var,           ~label,                                ~group,              ~index,
+                  "tst_med",      "Total sleep time (median)",           "A. Sleep duration", 1,
+                  "tib_med",      "Time in bed (median)",                "A. Sleep duration", 2,
+                  "slpeff_med",   "Sleep efficiency (median)",           "B. Sleep quality",  3,
+                  "sol_med",      "Sleep onset latency (median)",        "B. Sleep quality",  4,
+                  "sol_var",      "Sleep onset latency (variance)",      "B. Sleep quality",  5,
+                  "sfi_med",      "Sleep fragmentation index (median)",  "C. Fragmentation",  6,
+                  "insom_prop",   "Probable insomnia (proportion)",      "C. Fragmentation",  7,
+                  "hysom_prop",   "Probable hypersomnia (proportion)",   "C. Fragmentation",  8,
+                  "son_med",      "Sleep onset (median)",                "D. Regularity",     9,
+                  "abs_son_var",  "Sleep onset variance",                "D. Regularity",     10,
+                  "soff_med",     "Sleep offset (median)",               "D. Regularity",     11,
+                  "abs_soff_var", "Sleep offset variance",               "D. Regularity",     12,
+                  "smid_med",     "Sleep midpoint (median)",             "D. Regularity",     13,
+                  "smid_var",     "Sleep midpoint variance",             "D. Regularity",     14,
+                  "sjl",          "Social jet lag (hours)",              "D. Regularity",     15,
+                  "sri",          "Sleep regularity index (proportion)", "D. Regularity",     16)
 
 odp <- function(x) { sprintf("%.2f", x) }
 
@@ -107,34 +135,81 @@ tab_sleep <- merged %>%
                                              lag(.x) == .x ~ "", 
                                              TRUE ~ .x))) 
 
+gt(tab_sleep) %>%
+  cols_label(group = "Category",
+             label = "Measure",
+             col1 = "Median (IQR) [range]",
+             col2 = "N avail. / N total (% missing)") %>%
+  cols_align(columns = c("col1", "col2"),
+             align = "right")
 
-gt(tab_sleep)
+# Repeat, but using change in sleep since 3 months ago ------------------------
 
-merged %>%
-  select(tst_med,
+labels_ch <- labels %>%
+  mutate(var = paste0("cm3_", var))
 
-tab_sleep <- merged %>%
+
+tab_chsleep <- merged %>%
+  select(user_id, t,
+         all_of(labels_ch$var)) %>%
+  pivot_longer(-(c(user_id, t)),
+               names_to = "var",
+               values_to = "value") %>%
+  group_by(var) %>%
+  summarise(col1 = calc_summary(value),
+            col2 = calc_n(value)) %>%
+  left_join(labels_ch, by = "var") %>%
+  arrange(index) %>%
+  select(group, label, col1, col2) %>%
+  mutate(across(c(group, label), ~ case_when(is.na(lag(.x)) ~ .x,
+                                             lag(.x) == .x ~ "", 
+                                             TRUE ~ .x))) 
+
+gt(tab_chsleep) %>%
+  cols_label(group = "Category",
+             label = "Measure",
+             col1 = "Median (IQR) [range]",
+             col2 = "N avail. / N total (% missing)") %>%
+  cols_align(columns = c("col1", "col2"),
+             align = "right")
+
+###############################################################################
+####                                                                      #####
+####                                Figures                               #####
+####                                                                      #####
+###############################################################################
+
+# Sleep measures --------------------------------------------------------------
+
+p_sleep <- sel %>%
+  select(user_id, t,
+         all_of(labels$var)) %>%
+  pivot_longer(-c(user_id, t),
+               names_to = "measure",
+               values_to = "value") %>%
+  ggplot(aes(x = value,
+             fill = measure)) +
+  geom_density() +
+  geom_histogram() +
+  facet_wrap(~ measure,
+             ncol = 4,
+             scales = "free") +
+  theme_minimal(base_family = "Calibri") +
+  theme(legend.position = "none")
+p_sleep
+ggsave(p_sleep, 
+       filename = "~/p_sleep.png",
+       dev = "png",
+       width = 7,
+       height = 7,
+       dpi = 300)
+
+# Outcomes --------------------------------------------------------------------
+
+sel %>%
   ungroup() %>%
-  select(tst_med, tib_med, slpeff_med, son_med, soff_med, sol_med,
-         sfi_med, insom_prop, hysom_prop) %>%
-  mutate(across(c(insom_prop, hysom_prop), ~ .x * 100)) %>%
-  tbl_summary(label = list(tst_med ~ "Total sleep time (hours)",
-                           tib_med ~ "Total time in bed (hours)",
-                           slpeff_med ~ "Sleep efficiency (0-100)",
-                           son_med ~ "Sleep onset",
-                           soff_med ~ "Sleep offset",
-                           sol_med ~ "Sleep onset latency",
-                           sfi_med ~ "Sleep fragmentation index",
-                           insom_prop ~ "Probable insomnia, % of days",
-                           hysom_prop ~ "Probable hypersomnia, % of days"),
-              missing = "no",
-              statistic = list(all_continuous() ~ "{median} ({p25}, {p75}) [{min} to {max}]",
-                               all_categorical() ~ "{n} ({p}%)")) %>%
-  bold_labels() %>%
-  add_n(statistic = "{N_nonmiss}; {p_miss}% missing",
-        col_label = "**No. available**",
-        last = TRUE) %>%
-  modify_caption("**Sleep measures, based on 7+ days per month** (N = {N})")
-tab_sleep
-
+  select(t, relb, det, ids_total, cm3_ids_total) %>%
+  filter(t > 0) %>%
+  group_by(t) %>%
+  tbl_summary(by = "t")
 
