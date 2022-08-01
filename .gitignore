@@ -11,3 +11,6 @@ repo.Rproj
 *.Rdata
 /sleep/reference
 /sleep/models/processed
+/sleep/writing/results_cache
+/sleep/writing/results_files
+/sleep/writing/results.html
