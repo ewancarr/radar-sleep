@@ -1,4 +1,4 @@
-# Title:        Binary models for 'relapse' and 'deterioration'
+# Title:        Binary models for 'relapse'
 # Author:       Ewan Carr
 # Started:      2022-02-25
 
@@ -67,7 +67,7 @@ extract_ame <- function(.model, .label) {
 
 ###############################################################################
 ####                                                                      #####
-####                                Relapse                               #####
+####                    Fit models for 'Modified relapse'                 #####
 ####                                                                      #####
 ###############################################################################
 
@@ -119,48 +119,5 @@ rm(ame_relmod)
 
 save(fit_relmod, file = dest("relmod_fit"))
 rm(fit_relmod)
-
-###############################################################################
-####                                                                      #####
-####                              Deterioration                           #####
-####                                                                      #####
-###############################################################################
-
-# NOTE: no longer including this outcome in the paper.
-
-if (FALSE) {
-  d_det <- filter(dat, pid %in% s2)
-
-  # Specify models ------------------------------------------------------------
-
-  opt_det <- expand_grid(y = "det",
-                         x = trans,
-                         adj = list("", zcov))
-
-  # Fit models ----------------------------------------------------------------
-
-  fit_det <- pmap(opt_det,
-                  ~ do_lr(..1, ..2, ..3,
-                          d_det,
-                          iter = n_iter))
-  names(fit_det) <- make_names(opt_det)
-
-  # Extract posterior draws ---------------------------------------------------
-
-  draws_det <- imap(fit_det, ~ extract_draws(..1, ..2))
-  save(draws_det, file = dest("det_draws"))
-  rm(draws_det)
-
-  # Extract average marginal effects ------------------------------------------
-
-  ame_det <- imap(fit_det, ~ extract_ame(..1, ..2))
-  save(ame_det, file = dest("det_ame"))
-  rm(ame_det)
-
-  # Save ----------------------------------------------------------------------
-
-  save(fit_det, file = dest("det_fit"))
-  rm(fit_det)
-}
 
 # END.

@@ -55,7 +55,6 @@ med_summary <- function(x) {
 # Load prepared data ----------------------------------------------------------
 
 load(here("data", "clean", "merged.Rdata"), verbose = TRUE)
-load(here("data", "clean", "analytical_samples.Rdata"), verbose = TRUE)
 
 # Select required variables ---------------------------------------------------
 
@@ -93,7 +92,7 @@ covariates <- c("age", "male", "atyp",
                 "meds_mdd", "meds_other", "meds_sleep",
                 "edyrs", "partner")
 outcomes <- c("rel", "rel_mod", "rel_5cat", 
-              "det", "ids_total", "lag_ids_total")
+              "ids_total", "lag_ids_total")
 
 dat <- merged |> 
   ungroup() |> 
@@ -106,7 +105,7 @@ dat <- merged |>
 # Select analytical samples ---------------------------------------------------
 
 s1 <- dat |> drop_na(rel_mod) |> pluck("pid") |> unique()
-s2 <- dat |> drop_na(det) |> pluck("pid") |> unique()
+s2 <- dat |> drop_na(ids_total, lag_ids_total) |> pluck("pid") |> unique()
 
 # Scale continuous variables --------------------------------------------------
  
