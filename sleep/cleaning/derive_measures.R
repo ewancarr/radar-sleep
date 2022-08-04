@@ -12,29 +12,62 @@ library(data.table)
 library(future.apply)
 plan(multicore)
 verbose <- FALSE
-
-load(here("data", "clean", "opts.Rdata"), verbose = TRUE)
+weekend <- c("Fri", "Sat")
 source(here("sleep", "functions.R"))
 
-derive_midpoint <- function(start, stop) {
-  half <- round(0.5 * (interval(start, stop) / minutes(1)))
-  midpoint <- start + minutes(half)
-  return(hour(midpoint) + (minute(midpoint) / 60))
+# Load prepared data
+sleep <- readRDS(here("data", "clean", "sleep.rds"))
+survey <- readRDS(here("data", "clean", "survey.rds"))
+
+# Merge 3-monthly survey data with sleep data ---------------------------------
+
+# For a given window (e.g. 4 weeks), create a dataframe for each individual
+# containing the dates within that window. We then merge these dates with the 
+# corresponding sleep data.
+
+expand_individual <- function(d, ...) {
+    pmap_dfr(list(win_start = d$win_start,
+                  win_end = d$win_end,
+                  t = d$t,
+                  user_id = d$user_id),
+             function(win_start,
+                      win_end,
+                      ids_date,
+                      t,
+                      user_id) {
+               data.frame(user_id = user_id,
+                          t = t,
+                          merge_date = seq(win_start,
+                                           win_end,
+                                           by = "1 day"))
+             })
 }
 
-weekend <- c("Fri", "Sat")
+lookup_table <- survey |>
+  select(user_id, t, ids_date) |>
+  mutate(win_start = ids_date + weeks(-4),
+         win_end = ids_date + weeks(0)) |>
+  drop_na(win_start, win_end) |>
+  group_by(user_id) |>
+  group_split() |>
+  map_dfr(expand_individual) |>
+  as_tibble()
 
-# Select window ---------------------------------------------------------------
+sleep_4w <- left_join(lookup_table,
+                      sleep,
+                      by = c("user_id", "merge_date"))
 
-sleep_data <- opts$last_month
+# windows <- list(prev_2w = c(-2, 0),
+#                 first_month = c(-12, -8),
+#                 last_month = c(-4, 0))
 
 # Select only observations with minimum required days of data -----------------
 
 # NOTE: this is set to a minimum number of WEEKDAYS.
-min_days <- 5
+min_weekdays <- 5
 
 # Count the number of days per 3-monthly period
-n_days <- sleep_data |>
+n_days <- sleep_4w |>
   group_by(user_id, t) |>
   drop_na(total_sleep_time) |>
   summarise(n_weekdays = sum(!(lubridate::wday(unique(merge_date),
@@ -42,8 +75,8 @@ n_days <- sleep_data |>
             n_days = length(unique(merge_date)))
 
 sel <- n_days |> 
-  right_join(sleep_data, by = c("user_id", "t")) |>
-  filter(n_weekdays >= min_days)
+  right_join(sleep_4w, by = c("user_id", "t")) |>
+  filter(n_weekdays >= min_weekdays)
 
 # Select/rename required variables --------------------------------------------
 
@@ -75,7 +108,6 @@ sel <- select(sel,
 # isn't straightforward (e.g. the mean of two sleep onsets).
 
 sel <- drop_na(sel, user_id, merge_date, tst)
-
 setDT(sel)[,
            c("n_events", "longest") := .(.N, max(tst, na.rm = TRUE)),
            by = .(user_id, merge_date)]
@@ -111,15 +143,6 @@ sel$son_scaled <- ifelse(sel$son < 12,
 # sleep [within this time period]. Variance value of days within time
 # period.
 
-clock_diff <- function(i) {
-  # Function to calculate difference in hours between two 24 hour clocks.
-  from <- min(i)
-  to <- max(i)
-  d_fw <- (from + 24) - to
-  d_bw <- to - from
-  return(min(c(d_fw, d_bw)))
-}
-
 tdiff <- function(i) {
   start_time <- as.POSIXct(i[[1]] * 3600, origin = i[1])
   end_time <- as.POSIXct(i[[2]] * 3600, origin = i[2])
@@ -150,22 +173,6 @@ clock_diff <- function(i) {
     res[o] <- as.numeric(difftime(start_time, end_time, units = "hours"))
   }
   return(as.numeric(res[which(abs(res) == min(abs(res)))])[1])
-}
-
-# Check that the above function is behaving correctly
-if (verbose) {
-  cross_df(list(a = 1:24, b = 24:1)) |>
-    rowwise() |>
-    mutate(diff = clock_diff(c(a, b))) |>
-    ggplot(aes(x = a,
-               y = b,
-               label = diff,
-               color = diff)) +
-      geom_text() +
-      theme_minimal() +
-      scale_x_continuous(breaks = 1:24) +
-      scale_y_continuous(breaks = 1:24)  +
-      labs(x = "T1", y = "T2")
 }
 
 # Calculate median onset/offset per monthly period
@@ -275,6 +282,22 @@ sleep_vars <- as_tibble(sleep_vars)
 #        window                        window
 #
 
+
+###############################################################################
+####                                                                      #####
+####                          Prepare survey data                         #####
+####                                                                      #####
+###############################################################################
+
+# 1. Fill missing values of age, gender, years of education
+# 2. Recode site
+
+survey <- survey |>
+  group_by(user_id) |>
+  mutate(across(c(age, male, edyrs), ~ first(na.omit(.x))),
+         site_dam = site == "AMSTERDAM",
+         site_spain = site == "CIBER")
+
 ###############################################################################
 ####                                                                      #####
 ####                               Outcomes                               #####
@@ -319,20 +342,21 @@ merged <- survey |>
          male,
          edyrs,
          partner,
-         gad,
+         audit_total,
          ids_total,
+         ids_nosleep,
          rel,
          det,
-         starts_with("meds_"),
-         medication_category,
+         starts_with("med_"),
          melancholic_depression,
-         atypical_depression) |>
+         atypical_depression,
+         sunshine,
+         site,
+         site_dam,
+         site_spain) |>
   group_by(user_id) |>
   arrange(user_id, t) |>
   fill(partner) |>
-  mutate(across(c(male, edyrs), ~ dplyr::first(na.omit(.x))),
-         age = min(age, na.rm = TRUE),
-         age_this_window = age + (t / 12)) |>
   left_join(sleep_vars, by = c("user_id", "t"))
 
 # Calculate change (in sleep measures, IDS total score) -----------------------
@@ -359,7 +383,7 @@ merged <- tidyr::expand(merged, t = seq(3, 24, 3)) |>
                   sfi_med, 
                   awak_med,
                   hysom_ever,
-                  ids_total), 
+                  ids_total, ids_nosleep), 
                 ~ .x - dplyr::lag(.x), .names = "cm3_{.col}"),
          across(c(ids_total, son_med, soff_med), dplyr::lag, 1,
                 .names = "lag_{.col}"))
@@ -380,8 +404,6 @@ merged$cm3_soff_med <- winsor(merged$cm3_soff_med, c(-4, 4))
 
 merged$sol_var <- ifelse(merged$sol_var == 0, 0.001, merged$sol_var)
 merged$smid_rel_var <- ifelse(merged$smid_rel_var == 0, 0.001, merged$smid_rel_var)
-
-# Create standardised sleep measures ------------------------------------------
 
 
 ###############################################################################
@@ -447,4 +469,4 @@ merged$pid <- as.numeric(as.factor(merged$user_id))
 ####                                                                      #####
 ###############################################################################
 
-save(merged, file = here("data", "clean", "merged.Rdata"))
+saveRDS(merged, file = here("data", "clean", "merged.rds"))
