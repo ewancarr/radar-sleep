@@ -3,13 +3,18 @@
 # Started:      2022-06-14
 
 source(here::here("sleep", "models", "init.R"), echo = TRUE)
-n_iter <- 4000
+
+dest <- function(label) {
+  here("sleep", "models", "samples", paste0(label, ".Rdata"))
+}
+
+n_iter <- 2000
 
 d_ids <- filter(dat, pid %in% s2)
 
 # Specify models --------------------------------------------------------------
 
-opt_ids <- expand_grid(y = "ids_total",
+opt_ids <- expand_grid(y = c("ids_total", "ids_nosleep"),
                        x = trans,
                        adj = list("", zcov))
 

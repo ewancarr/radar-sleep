@@ -14,24 +14,14 @@ library(janitor)
 library(splines)
 verbose <- FALSE
 source(here("sleep", "functions.R"), echo = TRUE)
-set_cmdstan_path("~/.cmdstan/cmdstan-2.29.2")
+set_cmdstan_path("~/.cmdstan/cmdstan-2.30.1")
 
-host <- Sys.info()[["nodename"]]
-if (host == "air") {
-  n_iter <- 4000
-  n_thin <- 1
-  options(mc.cores = 2,
-          brms.backend = "cmdstanr",
-          brms.chains = 4)
-  n_thread <- threading(1)
-} else if (host == "office") {
-  n_iter <- 10000
-  n_thin <- 1
-  options(mc.cores = 20,
-          brms.backend = "cmdstanr",
-          brms.chains = 4)
-  n_thread <- threading(5)
-}
+# Set MCMC parameters
+n_iter <- 2000
+options(mc.cores = 20,
+        brms.backend = "cmdstanr",
+        brms.chains = 4)
+n_thread <- threading(5)
 
 # Functions -------------------------------------------------------------------
 

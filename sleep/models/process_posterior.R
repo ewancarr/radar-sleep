@@ -4,23 +4,29 @@
 
 library(tidyverse)
 library(here)
-source(here("sleep", "models", "init.R"))
-source(here("sleep", "cleaning", "labels.R"))
-
 library(marginaleffects)
+source(here("sleep", "models", "init.R"))
+load(here("sleep", "models", "samples", "ids_pre.Rdata"))
+source(here("sleep", "cleaning", "extra", "labels.R"))
 
 # Average marginal effects ----------------------------------------------------
 
-load(here("sleep", "models", "samples", "relmod_ame.Rdata"))
-load(here("sleep", "models", "samples", "ids_ame.Rdata"))
+load(here("sleep", "models", "samples", "relmod_ame.Rdata"), verbose = TRUE)
+load(here("sleep", "models", "samples", "ids_ame.Rdata"), verbose = TRUE)
 
 ame_draws <- bind_rows(map_dfr(ame_relmod, as_tibble, .id = "model"),
                        map_dfr(ids_ame, ~ as_tibble(.x$ame), .id = "model")) |>
-  mutate(y = factor(str_match(model, "^[a-z]+")[, 1], 
-                    levels = c("rel", "ids"),
-                    labels = c("Relapse", "IDS-SR"))) |>
+  separate(model,
+           into = c("y", "term", "adj"),
+           sep = "__") |>
+  mutate(adj = factor(adj,
+                      levels = c("unadj", "adj"),
+                      labels = c("Unadjust.", "Adjusted"))) |>
   filter(term != "hysom_ever") |>
   left_join(labels, by = c("term" = "x"))
+
+ame_nosleep <- filter(ame_draws, y %in% c("ids_total", "ids_nosleep"))
+ame_draws <- filter(ame_draws, y %in% c("rel_mod", "ids_total"))
 
 saveRDS(ame_draws,
         file = here("sleep", "models", "processed", "ame_draws.rds"),

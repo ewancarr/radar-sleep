@@ -1,3 +1,10 @@
+# Convert REDCAP event name into survey number
+which_event <- function(x) {
+  if_else(x == "enrolment_arm_1",
+          "0",
+          str_replace(x, "_month_assessmen[t]*_arm_1", ""))
+}
+
 # Winsorize extreme values
 winsor <- function(x, at = c(-5, 5)) { 
   x[x < at[1]] <- at[1]
@@ -18,4 +25,10 @@ cc <- function(x) {
   } else {
     return(paste0(" + ", paste(x, collapse = " + ")))
   }
+}
+
+derive_midpoint <- function(start, stop) {
+  half <- round(0.5 * (interval(start, stop) / minutes(1)))
+  midpoint <- start + minutes(half)
+  return(hour(midpoint) + (minute(midpoint) / 60))
 }

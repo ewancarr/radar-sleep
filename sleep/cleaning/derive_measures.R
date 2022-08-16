@@ -289,12 +289,18 @@ sleep_vars <- as_tibble(sleep_vars)
 ####                                                                      #####
 ###############################################################################
 
+first_nonmissing <- function(x) {
+  x <- x[!is.na(x)]
+  ifelse(length(x) > 0, x[1], NA)
+}
+
 # 1. Fill missing values of age, gender, years of education
 # 2. Recode site
 
 survey <- survey |>
+  arrange(user_id, t) |>
   group_by(user_id) |>
-  mutate(across(c(age, male, edyrs), ~ first(na.omit(.x))),
+  mutate(across(c(age, male, edyrs), first_nonmissing),
          site_dam = site == "AMSTERDAM",
          site_spain = site == "CIBER")
 
@@ -383,10 +389,10 @@ merged <- tidyr::expand(merged, t = seq(3, 24, 3)) |>
                   sfi_med, 
                   awak_med,
                   hysom_ever,
-                  ids_total, ids_nosleep), 
+                  ids_total), 
                 ~ .x - dplyr::lag(.x), .names = "cm3_{.col}"),
-         across(c(ids_total, son_med, soff_med), dplyr::lag, 1,
-                .names = "lag_{.col}"))
+         across(c(ids_total, ids_nosleep, son_med, soff_med),
+                dplyr::lag, 1, .names = "lag_{.col}"))
 
 # For others, calcuate difference in clock time
 merged$cm3_son_med <- future_apply(merged[, c("lag_son_med", "son_med")],

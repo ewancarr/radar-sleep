@@ -6,9 +6,9 @@ library(tidyverse)
 library(here)
 library(patchwork)
 library(ggdist)
-subset <- TRUE
+subset <- FALSE
 load(here("data", "clean", "for_modelling.Rdata"), verbose = TRUE)
-source(here("sleep", "cleaning", "labels.R"))
+source(here("sleep", "cleaning", "extra", "labels.R"))
 
 apre_draws <- readRDS(here("sleep", "models", "processed", "apre_draws.rds"))
 apre_draws <- filter(apre_draws, adj == "adj")

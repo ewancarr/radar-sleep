@@ -4,7 +4,7 @@
 
 library(here)
 source(here("sleep", "models", "init.R"))
-source(here("sleep", "cleaning", "labels.R"))
+source(here("sleep", "cleaning", "extra", "labels.R"))
 
 dest <- function(label) {
   here("sleep", "models", "samples", paste0(label, ".Rdata"))
