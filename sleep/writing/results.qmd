@@ -3,6 +3,7 @@ title: Tables and figures for RADAR sleep paper
 author: Ewan Carr
 date: "today"
 published-title: "Updated"
+title-block-banner: true
 format:
   html:
     code-fold: true
@@ -13,11 +14,12 @@ format:
     toc-location: right
     toc-depth: 3
     self-contained: true
+bibliography: references.bib
 ---
 
 # Introduction
 
-This document summarise the latest (and nearly final) results for the sleep paper.
+This document summarises the latest results for the sleep paper.
 
 ```{r Load packages}
 #| message: false
@@ -29,9 +31,10 @@ library(paletteer)
 library(patchwork)
 library(ggdist)
 load(here("data", "clean", "for_modelling.Rdata"))
-source(here("sleep", "cleaning", "labels.R"))
+source(here("sleep", "cleaning", "extra", "labels.R"))
 
 median_iqr <- function(x, dp = 1) {
+    x <- x[!is.na(x)]
     fdp <- function(val) { sprintf(str_glue("%.{dp}f"), val) }
     q <- quantile(x, c(0.25, 0.7))
     return(str_glue("{fdp(median(x, na.rm = TRUE))} ({fdp(q[1])}, {fdp(q[2])})"))
@@ -43,7 +46,6 @@ freq_pct <- function(x, dp = 1) {
 }
 ```
 
-
 # Methods
 
 ## Outcomes
@@ -52,23 +54,13 @@ freq_pct <- function(x, dp = 1) {
 
 This is modified to exclude participants with 'persistent high severity'.
 
-| y    | Criteria                                                     |
-| ---- | ------------------------------------------------------------ |
-| 1    | Meeting criteria for CIDI-SF **and** scoring > 25 on IDS-SR. |
-| 0    | *Not* meeting criteria for relapse **and** scoring ≤ 25 on IDS-SR. |
-| NA   | *Not* meeting criteria for relapse **and** scoring > 25 on IDS-SR. |
+| y   | Criteria                                                            |
+|------------|------------------------------------------------------------|
+| 1   | Meeting criteria for CIDI-SF **and** scoring \> 25 on IDS-SR.       |
+| 0   | *Not* meeting criteria for relapse **and** scoring ≤ 25 on IDS-SR.  |
+| NA  | *Not* meeting criteria for relapse **and** scoring \> 25 on IDS-SR. |
 
-### 2. Deterioration
-
-This captures worsening depression symptoms over a 3-month period, based on each individual’s personal variability in depression severity. It was calculated as:
-
-1. Identify the within-person standard deviation (SD) of IDS scores across follow-up (`IDS_SD`);
-
-2. Calculate the change in IDS depression severity between each time-point (`IDS_change`);
-3. Divide the change between each timepoint by the within-person SD (`IDS_difference`);
-4. For each timepoint, establish whether `IDS_difference` is ≥2.
-
-### 3. IDS severity
+### 2. IDS severity
 
 Total score at current 3-monthly survey.
 
@@ -76,110 +68,140 @@ Total score at current 3-monthly survey.
 
 At each 3-monthly survey, we're measuring:
 
-1. Sleep over the previous 4 weeks;
-2. Change in sleep between the previous survey (3 months ago) and now.
+1.  Sleep over the previous 4 weeks;
+2.  Change in sleep between the previous survey (3 months ago) and now.
 
-We're measuring sleep on weekdays only. (With the exception of 'social jet lag'). To be included at a given survey, participants needed to provide sleep data for at least 5 weekdays.
+We're measuring sleep on weekdays only. (With the exception of 'social jet
+lag'). To be included at a given survey, participants needed to provide sleep
+data for at least 5 weekdays.
 
 We're considering 3 types of measure:
 
-::: {layout-ncol=3} 
+* **Sleep duration** (4)
+  - Total time
+  - Total time, variance
+  - Δ Total time
+  - Δ Total time, variance
+* **Sleep quality** (4)
+  - Efficiency
+  - Fragmentation index
+  - Onset latency
+  - Onset latency variance
+* **Sleep regularity** (5)
+  - Sleep midpoint
+  - Sleep midpoint variance
+  - Δ Sleep midpoint
+  - Δ Sleep midpoint variance
+  - Social jet lag
 
-### Sleep duration  
-
-* Total time               
-* Total time, variance     
-* Δ Total time             
-* Δ Total time, variance
-
-### Sleep quality  
-
-* Efficiency
-* Fragmentation index
-* Onset latency
-* Onset latency variance
-* Δ onset latency
-* Δ onset latency variance
-
-### Sleep regularity  
-
-* Sleep onset
-* Δ sleep onset
-* Sleep onset variance
-* Sleep offset
-* Δ sleep onset
-* Sleep midpoint
-* Sleep midpoint variance
-* Social jet lag
-:::
 
 ## Covariates
 
-For now, we're adjusting for:
+We're adjusting for:
 
-* Age at enrolment
-* Male gender (0/1)
-* Whether taking depression medication (0/1)
-* Whether taking sleep medication (0/1)
-* Years of education
-* Partnership status
+- Age at enrolment
+- Male gender (0/1)
+- Medications
+  - Whether taking depression medication (0/1)
+  - Whether taking sleep medication (0/1)
+  * Whether taking other medication (0/1)
+- Years of education
+- Partnership status
+* Hours of sunshine last month
+* Site
+
+**TODO:** add AUDIT, after resolving query about missing items.
 
 ## Statistical analyses
 
-* Binary logistic regression for relapse and deterioration; linear regression for IDS-SR.
-* Outcomes are measured repeatedly, at months 3-24.
-* Data are pooled for analysis with individual random intercepts.
-* All models estimated using Bayesian methods in [brms](https://paul-buerkner.github.io/brms/)/R.
-* We consider non-linear effects of sleep, via quadratic terms.
+- Binary logistic regression for relapse; linear regression
+  for IDS-SR.
+- Outcomes are measured repeatedly, at months 3-24.
+- Data are pooled for analysis with individual random intercepts.
+- All models estimated using Bayesian methods in
+  [brms](https://paul-buerkner.github.io/brms/)/R.
+- We consider non-linear effects of sleep, via quadratic terms.
 
 The binary models are fairly straightforward, e.g.:
 
-```R
+```r
 y ~ sleep + sleep^2 + covariates + (1 | pid)
 ```
 
 The linear models are a bit more involved:
 
-* We're modelling the current IDS score while adjusting for the previous score (three months ago). 
-* We're including non-linear terms for the previous IDS score, to allow for the possibility of (i) negative effects of high past severity on future severity; and (ii) positive effects of low past severity on future severity. (This was suggested by Ingeborg).
-* We're allowing for the effect of sleep to vary by previous depression severity. 
+- We're modelling the current IDS score while adjusting for the previous score
+  (three months ago).
+- We're including non-linear terms for the previous IDS score, to allow for the
+  possibility of (i) negative effects of high past severity on future severity;
+  and (ii) positive effects of low past severity on future severity. (This was
+  suggested by Ingeborg).
+- We're allowing for the effect of sleep to vary by previous depression
+  severity.
 
 Something like:
 
-```R
+``` r
 current_ids ~ previous_ids + sleep + (sleep*previous_ids) + (1 | pid)   
 ```
 
-But where we include quadratic effects for all terms (`sleep` and `previous_ids`).
+But where we include quadratic effects for all terms (`sleep` and
+`previous_ids`).
 
+## Sensitivity analyses
+
+### 1. Differences by depression subtype
+
+We will test whether the effect of sleep on each outcome is moderated by
+'atypical' depression subtype.
+
+This will be tested by comparing models with and without an interaction term
+(sleep $\times$ atypical subtype) for each sleep measure.
+
+Models are compared using leave-one-out cross-validation (LOO; @vehtari2017)
+
+[@vehtari2017]
+
+### 2. Remove sleep items from IDS-SR
+
+We will repeat the IDS-SR models after removing the 4 questions about sleep:
+
+1. Falling asleep
+2. Sleep during the night
+3. Waking up too early
+4. Sleeping too much
 
 # Results
 
 ## Sample characteristics
 
-* **Sample 1**
-  * Must have at least one assessment of the modified relapse outcome.
-  * Must have information on sleep for month before the current and previous 
+- **Sample 1** (Relapse)
+  - Must have at least one assessment of the modified relapse outcome.
+  - Must have information on sleep for month before the current and previous
     surveys.
-* **Sample 2** 
-  * Must have at least one assessment of deterioration/IDS severity.
-  * Must have information on sleep for month before the current and previous 
+  - Must have information on covariates.
+- **Sample 2** (IDS-SR)
+  - Must have at least one assessment of IDS severity.
+  - Must have information on sleep for month before the current and previous
     surveys.
+  - Must have information on covariates.
 
 ```{r}
 
 baseline <- dat |>
   group_by(pid) |>
-  arrange(pid, t) |>
-  summarise(across(c(age, male, edyrs, partner), ~ first(na.omit(.x))))
+  summarise(across(c(age, male, edyrs, partner,
+                     med_depress, med_sleep, med_other, audit),
+                   ~ first(na.omit(.x))))
 
 b1 <- filter(baseline, pid %in% s1) |> mutate(samp = "s1")
 b2 <- filter(baseline, pid %in% s2) |> mutate(samp = "s2")
 
 top <- bind_rows(b1, b2) |>
   group_by(samp) |>
-  summarise(across(c(age, edyrs), median_iqr),
-            across(c(male, partner), freq_pct, 0)) |>
+  summarise(across(c(age, edyrs, audit), median_iqr),
+            across(c(male, partner, 
+                     med_depress, med_sleep, med_other), freq_pct, 0)) |>
   pivot_longer(-samp) |>
   pivot_wider(names_from = samp)
 
@@ -189,7 +211,7 @@ d2 <- filter(dat, pid %in% s2) |> mutate(samp = "s2")
 bottom <- bind_rows(d1, d2) |>
     group_by(samp) |>
     summarise(n_obs = str_glue("{n()}"),
-              across(c(rel_mod, det), freq_pct),
+              rel_mod = freq_pct(rel_mod),
               ids_total = median_iqr(ids_total)) |>
     pivot_longer(-samp)  |>
     pivot_wider(names_from = samp) |>
@@ -197,27 +219,32 @@ bottom <- bind_rows(d1, d2) |>
            s2 = if_else(name == "rel_mod", str_glue("--"), s2))
 
 row_labels <- data.frame(name = c("age", "edyrs", "male", "partner",
-                                  "rel_mod", "det", "ids_total",
+                                  "med_depress", "med_sleep", "med_other",
+                                  "audit",
+                                  "rel_mod", "ids_total",
                                   "n_obs"),
                         label = c("Age",
                                   "Years of education",
                                   "Male gender",
                                   "Lives with partner",
+                                  "Medication (Depression)",
+                                  "Medication (Sleep)",
+                                  "Medication (Other)",
+                                  "AUDIT total score",
                                   "Relapse",
-                                  "Deterioration",
                                   "IDS-SR total score",
                                   "No. follow-up assessments"),
-                        type = as_vector(str_split("ccbbbbcn", "")))
+                        type = as_vector(str_split("ccbbbbbcbcn", "")))
 
 bind_rows(top, bottom) |>
     left_join(row_labels, by = "name") |>
     select(-name, -type) |>
     gt(rowname_col = "label") |>
-    tab_header(title = md("**Table 1:** Charactaristics of analytical samples")) |>
+    tab_header(title = md("**Table 1:** Characteristics of analytical samples")) |>
     tab_row_group(label = md("*Outcomes over follow-up*"),
-                  rows = row_labels$label[5:8]) |>
+                  rows = row_labels$label[9:11]) |>
     tab_row_group(label = md("*Participant characteristics at enrolment*"),
-                 rows = row_labels$label[1:4]) |>
+                 rows = row_labels$label[1:8]) |>
     tab_spanner(label = "Sample 1", columns = s1) |>
     tab_spanner(label = "Sample 2", columns = s2) |>
     cols_label(s1 = str_glue("n={length(unique(d1$pid))} individuals"),
@@ -226,15 +253,20 @@ bind_rows(top, bottom) |>
     tab_footnote(footnote = "Median (IQR).",
                  locations = cells_stub(rows = row_labels[row_labels$type == "c", ]$label)) |>
     tab_footnote(footnote = "N (%).",
-                 locations = cells_stub(rows = row_labels[row_labels$type == "b", ]$label))
-
+                 locations = cells_stub(rows = row_labels[row_labels$type == "b", ]$label)) |>
+    tab_footnote(footnote = "Note: EXPLAIN THAT THE SAMPLES OVERLAP.",
+                 locations = cells_column_spanners()) |>
+    tab_options(footnotes.marks = c("*", "†", "‡"))
 ```
 
+### Notes
+
+* Large difference in IDS-SR between samples; to be expected given relape definition.
+* What else needs to go in this table?
 
 ## Sleep measures
 
 These figures will be included as supplementary.
-
 
 ```{r}
 untrans <- str_replace_all(trans, "z_|zlog_", "")
@@ -253,21 +285,16 @@ plot_data <- d2 |>
 spec <- list(p1 = list(title = "Sleep duration",
                        vars = c("z_tst_med", "z_cm3_tst_med",
                                 "zlog_tst_var", "z_cm3_tst_var"),
-                       col = 1, nrows = 1, w = 4),
+                       col = 1, nrows = 1, ncols = 4, w = 4),
              p2 = list(title = "Sleep quality",
-                       vars = c("z_sfi_med", "z_slpeff_med", "z_sol_med",
-                                "z_cm3_sol_med", "zlog_sol_var"),
-                       col = 2, nrows = 1, w = 5),
+                       vars = c("z_sfi_med", "z_slpeff_med",
+                                "z_sol_med", "zlog_sol_var"),
+                       col = 2, nrows = 1, ncols = 4, w = 4),
              p3 = list(title = "Sleep regularity",
-                       vars = c("z_son_scaled_med", "z_cm3_son_med",
-                                "zlog_son_rel_var",
-                                "z_soff_med", "z_cm3_soff_med",
-                                "zlog_soff_rel_var",
-                                "z_smid_med", "zlog_smid_rel_var"),
-                       col = 3, nrows = 2, w = 4),
-             p4 = list(title = "Other",
-                       vars = c("hysom_ever", "z_sjl"),
-                       col = 4, nrows = 1, w = 2))
+                       vars = c("z_smid_med", "zlog_smid_var",
+                                "z_cm3_smid_med", "z_cm3_smid_var",
+                                "z_sjl"),
+                       col = 3, nrows = 2, ncols = 4, w = 4))
 
 
 draw_distribution <- function(data, i, standardise = FALSE) {
@@ -287,18 +314,19 @@ draw_distribution <- function(data, i, standardise = FALSE) {
       facet_wrap(~ label_f,
                  scale = "free",
                  nrow = i$nrows,
+                 ncol = i$ncols,
                  labeller = labeller(label_f = label_wrap_gen(20))) +
       theme_ggdist() +
       theme(axis.title.x = element_blank(),
             plot.title = element_text(size = 18, face = "bold")) +
       labs(title = i$title)
-  p <- p + plot_spacer() + plot_layout(ncol = 2, widths = c(i$w, 5 - i$w))
+  p <- p + plot_spacer() + plot_layout(ncol = 2, widths = c(i$w, 4 - i$w))
   return(p)
 }
 
 pal <- paletteer_d("ghibli::KikiMedium", n = 5)[-1]
 
-h <- c(1, 1, 2.2, 1)
+h <- c(1, 1, 2.2)
 dist_orig <- map(spec, ~ draw_distribution(plot_data, .x)) |>
   wrap_plots(nrow = length(h),
              heights = h)
@@ -310,9 +338,7 @@ dist_trans <- map(spec,
              heights = h)
 ```
 
-
-::: {.panel-tabset}
-
+::: panel-tabset
 ## Original scales
 
 ```{r}
@@ -332,84 +358,183 @@ dist_orig
 
 dist_trans
 ```
-
 :::
 
 # Regression models
 
 ## Average marginal effects (AME)
 
-See [here](#whats-the-average-marginal-effect) for an explanation. This figure presents the 50% and 89% credible intervals.
+See [here](#whats-the-average-marginal-effect) for an explanation. This figure
+presents the 50% and 89% credible intervals.
 
 The x-axis represents:
 
-* For relapse and deterioration, the percentage point change per 1 SD differencen in each sleep measure.
-* For IDS-SR, the change in total score per 1 SD difference in each sleep measure.
+- For relapse and deterioration, the percentage point change per 1 SD
+  differencen in each sleep measure.
+- For IDS-SR, the change in total score per 1 SD difference in each sleep
+  measure.
 
 ```{r}
 #| fig-dpi: 300
 #| fig-width: 9
 #| fig-height: 8
+
 ame_draws <- readRDS(here("sleep", "models", "processed", "ame_draws.rds"))
+
+ame_draws <- ame_draws |>
+  mutate(y_label = factor(case_when(y == "rel_mod" ~ "Relapse",
+                                    y == "ids_total" ~ "IDS-SR"),
+                          levels = c("Relapse", "IDS-SR")),
+         gr = paste("Sleep\n", gr)) |>
+  mutate(estimate = if_else(y_label == "Relapse",
+                            estimate * 100, estimate))
+
 ame_draws |>
+  filter(term %in% trans) |>
   ggplot() +
   aes(x = estimate,
-      y = label_orig) +
-  geom_vline(xintercept = 0, color = "red", alpha = 0.5) +
-  stat_pointinterval(.width = c(0.89, 0.50)) +
-  facet_grid(cols = vars(y),
+      y = label_orig,
+      color = adj) +
+  geom_vline(xintercept = 0, color = pal[[1]], alpha = 0.5) +
+  stat_pointinterval(.width = c(0.89, 0.50),
+                     position = position_dodge(width = 0.5)) +
+  facet_grid(cols = vars(y_label),
              rows = vars(gr),
              space = "free_y",
              scales = "free") +
   theme_ggdist() + 
+  scale_color_manual(values = c(pal[[2]], pal[[3]])) +
   theme(strip.text.y = element_text(angle = 0),
-        panel.background = element_rect(fill = "gray95"),
-        panel.border = element_rect(color = "gray80", fill = NA, size = 1),
-        strip.background = element_rect(fill = "gray80"),
+        panel.border = element_rect(color = "gray90", fill = NA, size = 1),
+        strip.background = element_rect(fill = "gray90"),
+        legend.title = element_blank(),
         axis.title.y = element_blank()) +
   labs(title = "Average marginal effects",
+       x = "Average marginal effect",
        subtitle = "Per 1 SD difference/change in each sleep measure")
+
 ```
 
-:::{.column-page} 
+:::{.column-page}
 
-## Summary of average marginal effects
 
-D = duration; Q = quality; R = regularity; Rel = Relapse; Det = Deterioration.
+```{r}
+#| tbl-cap: "Supplementary Table: Average Marginal Effects"
 
-All measures refer to 'median' values unless otherwise specified.
+table_data <- ame_draws |>
+  group_by(gr, y_label, label_orig, adj) |>
+  median_qi(estimate) |>
+  mutate(cell = str_glue("{sprintf('%.3f', estimate)} [{sprintf('%.3f', .lower)}, {sprintf('%.3f', .upper)}]"))
 
-I've marked 'expectations' I'm unsure about [in yellow]{style="background-color: yellow"}.
-
-|      | Measure                  | We expect *increased*<br> depression with...                 | Expected direction | Finding               | Consistent across outcomes? | Consistent with expectations? |
-| ---- | ------------------------ | ------------------------------------------------------------ | ------------------ | --------------------- | --------------------------- | ----------------------------- |
-| D    | Total time               | Fewer hours sleep                                            | -ive               | +ive Rel/IDS but NSF. | ✅                           | ❌                             |
-| D    | Total time, variance     | More variable sleep                                          | +ive               | +ive for Rel/IDS.     | ❌                           | ✅                             |
-| D    | Δ Total time             | Reduction in hours of sleep                                  | -ive               | +ive for Det.         | ❌                           | ❌                             |
-| D    | Δ Total time, variance   | Increased variance                                           | +ive               | +ive.                 | ✅                           | ✅                             |
-| Q    | Efficiency               | Lower efficiency                                             | -ive               | -ive for Det/IDS.     | ❌                           | ✅                             |
-| Q    | Fragmentation index      | Increased fragmentation                                      | +ive               | +ive, NSF for Rel.    | ✅                           | ✅                             |
-| Q    | Onset latency            | Longer onset latency                                         | +ive               | No effect.            | ✅                           | ❌                             |
-| Q    | Onset latency variance   | [More variable onset latency?]{style="background-color: yellow"} | +ive               | No effect.            | ✅                           | ❌                             |
-| Q    | Δ onset latency          | Increased onset latency                                      | +ive               | No effect.            | ✅                           | ❌                             |
-| Q    | Δ onset latency variance | Increased variability of onset latency                       | +ive               | No effect.            | ✅                           | ❌                             |
-| R    | Sleep onset              | Later onset                                                  | +ive               | +ive for Rel/IDS.     | ✅, mostly.                  | ✅                             |
-| R    | Δ sleep onset            | Increase in onset                                            | +ive               | -ive but NSF.         | ✅                           | ❌ or NSF.                     |
-| R    | Sleep onset variance     | Increased variance                                           | +ive               | +ive for Rel/IDS.     | ✅                           | ✅                             |
-| R    | Sleep offset             | [Earlier offset]{style="background-color: yellow"}           | -ive               | +ive for IDS.         | ❌                           | ❌                             |
-| R    | Δ sleep offset           | Earlier offset.                                              | -ive               | +ive                  | ✅                           | ❌                             |
-| R    | Sleep midpoint           | Later midpoint                                               | +ive               | +ive for IDS.         | ❌                           | ✅                             |
-| R    | Sleep midpoint variance  | [More variable midpoint?]{style="background-color: yellow"}  | +ive               | +ive for IDS.         | ❌                           | ✅                             |
-| R    | Social jet lag           | [Larger social jet lag?]{style="background-color: yellow"}   | +ive               | No effect.            | ✅                           | ❌                             |
+table_data |>
+  select(gr, label_orig, y_label, adj, cell) |>
+  pivot_wider(names_from = c(y_label, adj),
+              values_from = cell) |>
+  group_by(gr) |>
+  gt() |>
+  tab_spanner(label = "Relapse", columns = starts_with("Relapse_")) |>
+  tab_spanner(label = "IDS-SR", columns = starts_with("IDS-SR_")) |>
+  cols_align(align = "left", columns = label_orig) |>
+  cols_label(label_orig = "",
+             Relapse_Unadjust. = "Unadj.",
+             Relapse_Adjusted = "Adj.",
+             `IDS-SR_Unadjust.` = "Unadj.",
+             `IDS-SR_Adjusted` = "Adj.") |>
+  tab_style(style = list(cell_text(weight = "bold")),
+            locations = list(cells_row_groups(),
+                             cells_title(),
+                             cells_column_spanners()))
+```
 
 :::
 
-
 ## Adjusted predictions
 
-These are attached to my email. (I haven't included these here, because they're too big). These figures show how the predicted value of each outcome (probability for relapse and deterioration; total score for IDS) change across the range of each sleep measure, from -2 SD to +2 SD.
+These are attached to my email. (I haven't included these here, because they're
+too big). These figures show how the predicted value of each outcome
+(probability for relapse and deterioration; total score for IDS) change across
+the range of each sleep measure, from -2 SD to +2 SD.
 
-The idea would be to present (a) all of these in supplementary materials; (b) a smaller selection in the main text (e.g. a 2x2 grid to demonstrate typical results).
+The idea would be to present (a) all of these in supplementary materials; (b) a
+smaller selection in the main text (e.g. a 2x2 grid to demonstrate typical
+results).
+
+
+
+## Sensitivity analysis
+
+### 1. Differences by depression subtype
+
+The table below reports the difference in the ELPD (expected log predictive
+density) for models with and without a 'sleep $\times$ atypical depression'
+interaction term.
+
+Generally, differences of 4 or greater would indicate evidence for the
+alternative model[^loo].
+
+[^loo]: https://avehtari.github.io/modelselection/CV-FAQ.html#5_How_to_use_cross-validation_for_model_selection
+
+No models reach this threshold, i.e., no support for 'atypical depression
+subtype' being a moderator.
+
+In the table, the `elpd_diff` column is the difference between the two models.
+
+* Values above zero indicate the interaction model is better.
+* Values below zero indicate the non-interaction model is better.
+
+But as above, none of these reach thresholds for sigificance.
+
+```{r}
+comparison <- readRDS(here("sleep", "models", "processed", "by_atypical.rds"))
+
+comparison |>     
+  mutate(improvement = with_int > no_int, 
+         how_much = with_int - no_int) |>  
+  separate(model, c("y", "x", "adj"), "__") |>
+  left_join(labels, by = "x") |>
+    select(label_orig, y, improvement, how_much) |>
+  gt()
+```
+
+### 2. Remove sleep items from IDS-SR
+
+The results are slightly attenuated, but conclusions unchanged.
+
+```{r}
+#| tbl-cap: "Supplementary Table: Average Marginal Effects for IDS-SR without sleep items"
+ame_nosleep <- readRDS(here("sleep", "models", "processed",
+                            "ame_nosleep.rds")) |>
+  mutate(y_label = factor(y, levels = c("ids_total", "ids_nosleep")),
+         gr = paste("Sleep\n", gr),
+         estimate = if_else(y_label == "Relapse",
+                            estimate * 100, estimate))
+
+table_data <- ame_nosleep |>
+  group_by(gr, y_label, label_orig, adj) |>
+  median_qi(estimate) |>
+  mutate(cell = str_glue("{sprintf('%.3f', estimate)} [{sprintf('%.3f', .lower)}, {sprintf('%.3f', .upper)}]"))
+
+table_data |>
+  select(gr, label_orig, y_label, adj, cell) |>
+  pivot_wider(names_from = c(y_label, adj),
+              values_from = cell) |>
+  group_by(gr) |>
+  gt() |>
+  tab_spanner(label = "IDS-SR\nOriginal scale",
+              columns = starts_with("ids_total")) |>
+  tab_spanner(label = "IDS-SR\nSleep items removed",
+              columns = starts_with("ids_nosleep")) |>
+  cols_label(label_orig = "",
+             `ids_total_Unadjust.` = "Unadj.",
+             `ids_total_Adjusted` = "Adj.",
+             `ids_nosleep_Unadjust.` = "Unadj.",
+             `ids_nosleep_Adjusted` = "Adj.") |>
+  cols_align(align = "left", columns = label_orig) |>
+  tab_style(style = list(cell_text(weight = "bold")),
+            locations = list(cells_row_groups(),
+                             cells_title(),
+                             cells_column_spanners()))
+```
 
 
 ## Summary of key findings
@@ -432,44 +557,37 @@ This is not helped by very small numbers for the relapse outcome. Measurement er
 
 ## Questions for discussion
 
-* Should we include all three outcomes?
-  * Results for relapse and IDS severity were largely consistent, whereas deterioration often gave contradictory results.
-  * Not a reason to exclude, but certainly complicates the picture. 
-* I don't think we need all the 'onset latency' measures. We have:
-  * Onset latency
-  * Change in onset latency
-  * Variance of onset latency
-  * Change in variance of onset latency.
-* Are we happy with the list of covariates? Want to add anything?
+-   Should we include all three outcomes?
+    -   Results for relapse and IDS severity were largely consistent, whereas deterioration often gave contradictory results.
+    -   Not a reason to exclude, but certainly complicates the picture.
+-   I don't think we need all the 'onset latency' measures. We have:
+    -   Onset latency
+    -   Change in onset latency
+    -   Variance of onset latency
+    -   Change in variance of onset latency.
+-   Are we happy with the list of covariates? Want to add anything?
 
 ## Things that I still need to do
 
-- [ ] Remove sleep items from IDS score and re-run models.
-- [ ] Finalise list of covariates; re-run everything.
+-   [ ] Remove sleep items from IDS score and re-run models.
+-   [ ] Finalise list of covariates; re-run everything.
 
+# Appendix
 
-
-# Appendix 
-
-## What's the average marginal effect?
+## What's the average marginal effect? {#whats-the-average-marginal-effect}
 
 Average marginal effects (AMEs) represent the change in the $Y$ per unit change/difference in $X$ averaged over the participants in our sample.
 
-1. For each row/participant, calculated the 'fitted values' by plugging their values for each variable into the model equation.
-2. Taking the average of the fitted values.
+1.  For each row/participant, calculated the 'fitted values' by plugging their values for each variable into the model equation.
+2.  Taking the average of the fitted values.
 
 This is shown below:
 
 ![](figures/ame.png)
 
-
-
-
 This gives us a single number summary of the effect of $X$ on $Y$, accounting for any nonlinear terms, for the participants in our sample. This is in contrast to 'adjusted predictions', where we calculate the model predicted values at specified values of each covariate.
 
 See [this blog post](https://www.andrewheiss.com/blog/2022/05/20/marginalia/) for details.
-
-
 
 ## How do I interpret a credible interval?
 
@@ -479,10 +597,7 @@ We're interested in the posterior distribution for a given effect, produced by c
 
 Credible intervals are used to describe the distribution of the posterior distribution.
 
-* A 50% credible interval has a 50% probability of the true value falling within this range.
-* A 90% credible interval has a 90% probability of the true value falling within this range.
+-   A 50% credible interval has a 50% probability of the true value falling within this range.
+-   A 90% credible interval has a 90% probability of the true value falling within this range.
 
 In most figures, I present the 50% and 89% credible intervals. But this choice is arbritrary -- all we're doing is summarising the posterior distribution.
-
-
-
