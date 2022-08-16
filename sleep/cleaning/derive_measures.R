@@ -342,7 +342,7 @@ merged <- survey |>
          male,
          edyrs,
          partner,
-         audit_total,
+         audit,
          ids_total,
          ids_nosleep,
          rel,
@@ -447,6 +447,7 @@ merged$rel_5cat <- factor(merged$rel_5cat,
 ###############################################################################
 
 # NOTE: if subtype is missing, use PREVIOUS non-missing value for participant
+
 merged <- merged |>
   arrange(user_id, t) |>
   group_by(user_id, t) |>

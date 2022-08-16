@@ -2,16 +2,15 @@
 # Author:       Ewan Carr
 # Started:      2022-02-07
 
+library(tidyverse)
 library(here)
+library(lubridate)
 library(haven)
 library(janitor)
-library(lubridate)
 library(naniar)
 library(fs)
 library(data.table)
 library(dtplyr)
-library(dplyr, warn.conflicts = FALSE)
-library(tidyverse)
 source(here("sleep", "functions.R"))
 
 ###############################################################################
@@ -37,37 +36,13 @@ survey <- read_dta(here("data", "raw", "totaldataset.dta")) |>
          ids_total = as.numeric(ids_total),
          site = case_when(recruitmentsite == 1 ~ "KCL",
                           recruitmentsite == 2 ~ "CIBER",
-                          recruitmentsite == 3 ~ "AMSTERDAM"))
-
-# Score the AUDIT -------------------------------------------------------------
-
-audit_bl <- select(survey, user_id, t, audit_1:audit_10) |> 
-  filter(t == 0) |>
-  mutate(across(audit_1:audit_10, as.numeric))
-
-audit_fu <- select(survey, user_id, t, audit_fu_1:audit_fu_10) |> 
-  filter(t > 0) |>
-  set_names(c("user_id", "t", paste0("audit_", 1:10))) |>
-  mutate(across(audit_1:audit_10, as.numeric))
-
-audit <- bind_rows(audit_bl, audit_fu) |>
-  arrange(user_id, t) 
-
-# TEMPORARY SOLUTION -- get from separate file. TODO: work out how missing
-# items are handled.
-
-audit <- read_dta(here("data", "raw", "extended_data_2021_09_30.dta")) |>
-    rename(user_id = subject_id,
-           event = redcap_event_name) |>
-    clean_names() |>
-    mutate(event = which_event(event),
-           t = as.numeric(event),
-           audit_total = if_else(t == 0, 
-                                 baseline_audit_total,
-                                 followup_audit_total)) |>
-    select(user_id, t, audit_total)
-
-survey <- survey |> left_join(audit, by = c("user_id", "t"))
+                          recruitmentsite == 3 ~ "AMSTERDAM"),
+         audit = if_else(t == 0,
+                         baseline_audit_total,
+                         followup_audit_total)) |>
+         group_by(pid) |>
+         fill(audit, .direction = "updown") |>
+         ungroup()
 
 # Identify depression subtypes ------------------------------------------------
 
