@@ -93,14 +93,14 @@ do_lr <- function(.y, .x, .adj, .data, ...) {
       control = list(adapt_delta = 0.999,
                      step_size = 0.01,
                      max_treedepth = 15),
-      threads = n_thread,
       ...)
 }
 
 fit_relmod <- pmap(opt_relmod,
                    ~ do_lr(..1, ..2, ..3, 
                            d_relapse,
-                           iter = n_iter))  
+                           iter = n_iter,
+                           threads = n_thread))  
 names(fit_relmod) <- make_names(opt_relmod)
 
 # Extract posterior draws -----------------------------------------------------
@@ -110,14 +110,61 @@ save(draws_relmod, file = dest("relmod_draws"))
 rm(draws_relmod)
 
 # Extract average marginal effects --------------------------------------------
+
 ame_relmod <- imap(fit_relmod, ~ extract_ame(..1, ..2))
 save(ame_relmod, file = dest("relmod_ame"))
 rm(ame_relmod)
-
 
 # Save ------------------------------------------------------------------------
 
 save(fit_relmod, file = dest("relmod_fit"))
 rm(fit_relmod)
+
+###############################################################################
+####                                                                      #####
+####        Sensitivity analysis: differences by depression subtype       #####
+####                                                                      #####
+###############################################################################
+
+formula_with_interaction <- function(.y, .x, .adj,
+                                     interact = TRUE,
+                                     modifier = "atyp") {
+  if (interact) {
+    return(as.formula(str_glue("{.y} ~ {.x} + I({.x}^2) + {modifier} + {.x}:{modifier} + I({.x}^2):{modifier}{cc(.adj)} + (1 | pid)")))
+  } else {
+    return(as.formula(str_glue("{.y} ~ {.x} + I({.x}^2) + {modifier}{cc(.adj)} + (1 | pid)")))
+  }
+}
+
+test_interaction <- function(.y, .x, .adj, .data, ...) {
+  # Specify formula with and without interaction term
+  f_with <- formula_with_interaction(.y, .x, .adj, TRUE, "atyp")
+  f_wo <- formula_with_interaction(.y, .x, .adj, FALSE, "atyp")
+  # Fit models
+  m_with <- brm(f_with, 
+                data = .data,
+                family = bernoulli(),
+                prior = set_prior("normal(0, 1.5)", class = "b"),
+                control = list(adapt_delta = 0.999,
+                               step_size = 0.01,
+                               max_treedepth = 15),
+                ...)
+  m_wo <- brm(f_with, 
+              data = .data,
+              family = bernoulli(),
+              prior = set_prior("normal(0, 1.5)", class = "b"),
+              control = list(adapt_delta = 0.999,
+                             step_size = 0.01,
+                             max_treedepth = 15),
+              ...)
+  return(list(wo = m_wo, wi = m_with))
+}
+
+int_relmod <- pmap(opt_relmod, ~ test_interaction(..1, ..2, ..3,
+                                                  d_relapse,
+                                                  iter = n_iter,
+                                                  threads = n_thread))
+names(int_relmod) <- make_names(opt_relmod)
+save(int_relmod, file = dest("relmod_int"))
 
 # END.

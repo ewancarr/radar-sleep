@@ -108,3 +108,61 @@ rm(ids_ame)
 ids_pre <- imap(fit_ids, extract_adjusted_predictions)
 save(ids_pre, file = here("sleep", "models", "samples", "ids_pre.Rdata"))
 rm(ids_pre)
+
+###############################################################################
+####                                                                      #####
+####        Sensitivity analysis: differences by depression subtype       #####
+####                                                                      #####
+###############################################################################
+
+fit_interaction <- function(.y, .x, .adj, .data,
+                            include_interaction = FALSE,
+                            modifier = "atyp",
+                            ...) {
+  if (include_interaction) {
+    form <- as.formula(str_squish(str_glue(
+              "{.y} ~ lag_{.y} + 
+              I(lag_{.y}^2) +
+              {modifier} +
+              {.x} + I({.x}^2) +
+              {.x}:lag_{.y} + {.x}:I(lag_{.y}^2) +
+              I({.x}^2):lag_{.y} + I({.x}^2):I(lag_{.y}^2)
+              {cc(.adj)} + (1 | pid)"
+            )))
+  } else {
+    form <- as.formula(str_squish(str_glue(
+              "{.y} ~ lag_{.y} + 
+              I(lag_{.y}^2) +
+              {modifier} +
+              {.x}:{modifier} + I({.x}^2):{modifier} +
+              {.x}:lag_{.y}:{modifier} + {.x}:I(lag_{.y}^2):{modifier} +
+              I({.x}^2):lag_{.y}:{modifier} + I({.x}^2):I(lag_{.y}^2):{modifier}
+              {cc(.adj)} + (1 | pid)"
+            )))
+  }
+  fit <- brm(form,
+             data = .data,
+             family = gaussian(),
+             prior = set_prior("normal(0, 2)", class = "b"),
+             control = list(adapt_delta = 0.999,
+                            step_size = 0.01,
+                     max_treedepth = 15),
+             threads = n_thread,
+             iter = n_iter,
+             ...) |>
+          add_criterion("loo")
+  return(fit)
+}
+
+test_interaction <- function(.y, .x, .adj, .data, ...) {
+  # Fit models
+  m_wo <- fit_interaction(.y, .x, .adj, .data)
+  m_with <- fit_interaction(.y, .x, .adj, .data, modifier = "atyp")
+  return(list(wo = m_wo, wi = m_with))
+}
+
+int_ids <- pmap(opt_ids, ~ test_interaction(..1, ..2, ..3, d_ids))
+names(int_ids) <- make_names(opt_ids)
+save(int_ids, file = dest("ids_int"))
+
+# END.

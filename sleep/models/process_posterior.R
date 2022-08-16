@@ -52,3 +52,30 @@ apre_draws <- bind_rows(post_relmod, post_ids) |>
 saveRDS(apre_draws, 
         file = here("sleep", "models", "processed", "apre_draws.rds"),
         compress = TRUE)
+
+# Sensitivity analyses --------------------------------------------------------
+
+# 1. Differences by depression subtype
+
+load(here("sleep", "models", "samples", "relmod_int.Rdata"), verbose = TRUE)
+
+# with_loo <- map(int_relmod, ~ map(.x, add_criterion, "loo", moment_match = TRUE))
+with_loo <- map(int_relmod, 
+                ~ map(.x, add_criterion, "loo"))
+
+comparison <- map_dfr(with_loo, ~ loo_compare(.x$wo, .x$wi) |> 
+                      as.data.frame() |>
+                      rownames_to_column(),
+                      .id = "model") |>
+  select(model, rowname, elpd_diff) |>
+  pivot_wider(names_from = rowname, values_from = elpd_diff) |>
+  select(model, no_int = `.x$wo`, with_int = `.x$wi`)
+
+saveRDS(comparison, file = here("sleep", "models", "processed",
+                                "by_atypical.rds"))
+  
+# 2. Remove sleep items from RDS
+
+saveRDS(ame_nosleep,
+        file = here("sleep", "models", "processed", "ame_nosleep.rds"),
+        compress = TRUE)
