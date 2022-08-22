@@ -36,6 +36,7 @@ do_lm <- function(.y, .x, .adj, .data, ...) {
       control = list(adapt_delta = 0.999,
                      step_size = 0.01,
                      max_treedepth = 15),
+      stan_model_args = list(stanc_options = list("O1")),
       threads = n_thread,
       iter = n_iter,
       ...)
@@ -147,6 +148,7 @@ fit_interaction <- function(.y, .x, .adj, .data,
              control = list(adapt_delta = 0.999,
                             step_size = 0.01,
                      max_treedepth = 15),
+             stan_model_args = list(stanc_options = list("O1")),
              threads = n_thread,
              iter = n_iter,
              ...) |>
