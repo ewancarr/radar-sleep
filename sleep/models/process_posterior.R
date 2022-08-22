@@ -1,4 +1,4 @@
-# Title:        Process sleep models
+# Title:        Process posterior samples for sleep models
 # Author:       Ewan Carr
 # Started:      2022-06-20
 

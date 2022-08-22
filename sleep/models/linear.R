@@ -45,31 +45,35 @@ save(fit_ids, file = here("sleep", "models", "samples", "ids_fit.Rdata"))
 
 # Process posterior -----------------------------------------------------------
 
-extract_ame <- function(.model, .label) {
+extract_ame <- function(.model, .label, ameby = FALSE) {
   # Get x, y, covariates from model label
   params <- str_match(.label,
                       "([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)")
   y <- params[, 2]
   x <- params[, 3]
   cov <- params[, 4]
-  # Extract AVERAGE MARGINAL EFFECTS
-  ame <- marginaleffects(.model) |> 
+  # Get AVERAGE MARGINAL EFFECTS
+  ame <- marginaleffects(.model, variables = x) |> 
     summary() |> 
-    posteriordraws() |>
-    filter(term == x)
-  # Get AVERAGE MARGINAL EFFECTS, stratified by previous IDS score
-  ame_by <- marginaleffects(.model,
-                            variables = x,
-                            newdata = datagrid(lag_ids_total = seq(0, 74, 5),
-                                               grid_type = "counterfactual")) |>
-    summary(by = "lag_ids_total")
-   ame_by <- as_tibble(ame_by)
-   ame_by$cov <- cov
-   ame_by$y <- y
-   return(list(ame = ame, ame_by = ame_by))
+    posteriordraws() 
+  if (ameby) {
+    # Get AVERAGE MARGINAL EFFECTS, stratified by previous IDS score
+    ame_by <- marginaleffects(.model,
+                              variables = x,
+                              newdata = datagrid(lag_ids_total = seq(0, 74, 5),
+                                                 grid_type = "counterfactual")) |>
+      summary(by = "lag_ids_total")
+     ame_by <- as_tibble(ame_by)
+     ame_by$cov <- cov
+     ame_by$y <- y
+     return(list(ame = ame, ame_by = ame_by))
+  } else {
+    return(list(ame = ame))
+  }
 }
 
-extract_adjusted_predictions <- function(.model, .label,
+extract_adjusted_predictions <- function(.model,
+                                         .label,
                                          cluster_var = "pid",
                                          r = seq(-2, 2, 0.1)) {
   # Get x, y, covariates from model label
@@ -97,7 +101,8 @@ extract_adjusted_predictions <- function(.model, .label,
 
 # Average marginal effects ----------------------------------------------------
 
-ids_ame <- imap(fit_ids, extract_ame) # NOTE: This takes about 20 minutes.
+# NOTE: This takes about 5 minutes.
+ids_ame <- imap(fit_ids, extract_ame, ameby = FALSE) 
 save(ids_ame, file = here("sleep", "models", "samples", "ids_ame.Rdata"))
 rm(ids_ame)
 

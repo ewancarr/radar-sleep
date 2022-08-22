@@ -4,6 +4,8 @@ author: Ewan Carr
 date: "today"
 published-title: "Updated"
 title-block-banner: true
+params:
+  save_figs: TRUE
 format:
   html:
     code-fold: true
@@ -32,6 +34,7 @@ library(patchwork)
 library(ggdist)
 load(here("data", "clean", "for_modelling.Rdata"))
 source(here("sleep", "cleaning", "extra", "labels.R"))
+source(here("sleep", "functions.R"))
 
 median_iqr <- function(x, dp = 1) {
     x <- x[!is.na(x)]
@@ -173,6 +176,56 @@ We will repeat the IDS-SR models after removing the 4 questions about sleep:
 
 # Results
 
+## Excluded participants
+
+Before any exclusions, there are `r nrow(dat)` observations and 
+`r length(unique(dat$user_id))` individuals in the dataset.
+
+After excluding with missing sleep variables:
+
+```{r}
+cc <- dat |> drop_na(all_of(sleep_vars))
+print_n(cc)
+```
+
+After excluding individuals with missing covariates:
+
+```{r}
+cc <- cc |> drop_na(all_of(zcov))
+print_n(cc)
+```
+
+Then, Sample 1, excluding missing relapse outcome:
+
+```{r}
+cc1 <- cc |> drop_na(rel_mod)
+print_n(cc1)
+```
+
+And Sample 2, excluding missing IDS-SR outcome (current and lagged):
+
+```{r}
+cc2 <- cc |> drop_na(ids_total, lag_ids_total)
+print_n(cc2)
+```
+
+### Compare excluded participants vs. included
+
+```{r}
+tab_sup1 <- bind_rows(filter(dat, !(user_id %in% cc2$user_id)) |> mutate(samp = "Excluded"),
+          cc1 |> mutate(samp = "Sample 1"),
+          cc2 |> mutate(samp = "Sample 2")) |>
+  group_by(samp, pid) |>
+  select(samp, age, ids_total, male, partner, edyrs, med_depress) |>
+  summarise(across(everything(), first)) |>
+  select(-pid) |>
+  tbl_summary(by = samp) |>
+  as_gt() |>
+  tab_header(title = md("**Supplementary Table 1:** Compared excluded vs. included individuals")) 
+
+gtsave(tab_sup1, here("sleep", "writing", "tables", "tab_sup1.rtf"))
+```
+
 ## Sample characteristics
 
 - **Sample 1** (Relapse)
@@ -186,8 +239,8 @@ We will repeat the IDS-SR models after removing the 4 questions about sleep:
     surveys.
   - Must have information on covariates.
 
-```{r}
 
+```{r}
 baseline <- dat |>
   group_by(pid) |>
   summarise(across(c(age, male, edyrs, partner,
@@ -236,7 +289,7 @@ row_labels <- data.frame(name = c("age", "edyrs", "male", "partner",
                                   "No. follow-up assessments"),
                         type = as_vector(str_split("ccbbbbbcbcn", "")))
 
-bind_rows(top, bottom) |>
+tab_1 <- bind_rows(top, bottom) |>
     left_join(row_labels, by = "name") |>
     select(-name, -type) |>
     gt(rowname_col = "label") |>
@@ -257,7 +310,12 @@ bind_rows(top, bottom) |>
     tab_footnote(footnote = "Note: EXPLAIN THAT THE SAMPLES OVERLAP.",
                  locations = cells_column_spanners()) |>
     tab_options(footnotes.marks = c("*", "†", "‡"))
+
+gtsave(tab_1, here("sleep", "writing", "tables", "tab_1.rtf"))
+tab_1
+
 ```
+
 
 ### Notes
 
