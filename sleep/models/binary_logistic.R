@@ -71,12 +71,12 @@ extract_ame <- function(.model, .label) {
 ####                                                                      #####
 ###############################################################################
 
-d_relapse <- filter(dat, pid %in% s1)
+d_relapse <- filter(dat, pid %in% s1) |> drop_na(rel_mod)
 
 # Specify models --------------------------------------------------------------
 
 construct_formula <- function(.y, .x, .adj, .k = 7) {
-  return(as.formula(str_glue("{.y} ~ {.x} + I({.x}^2){cc(.adj)} + (1 | pid)")))
+  return(as.formula(str_glue("{.y} ~ s({.x}, k = 3){cc(.adj)} + (1 | pid)")))
 }
 
 opt_relmod <- expand_grid(y = "rel_mod",

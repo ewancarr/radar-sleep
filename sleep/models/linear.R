@@ -3,12 +3,11 @@
 # Started:      2022-06-14
 
 source(here::here("sleep", "models", "init.R"), echo = TRUE)
+run_sensitivity <- FALSE
 
 dest <- function(label) {
   here("sleep", "models", "samples", paste0(label, ".Rdata"))
 }
-
-n_iter <- 2000
 
 d_ids <- filter(dat, pid %in% s2)
 
@@ -21,14 +20,12 @@ opt_ids <- expand_grid(y = c("ids_total", "ids_nosleep"),
 # Fit models ------------------------------------------------------------------
 
 do_lm <- function(.y, .x, .adj, .data, ...) {
-  form <- as.formula(str_squish(str_glue(
-            "{.y} ~ lag_{.y} + 
-            I(lag_{.y}^2) +
-            {.x} + I({.x}^2) +
-            {.x}:lag_{.y} + {.x}:I(lag_{.y}^2) +
-            I({.x}^2):lag_{.y} + I({.x}^2):I(lag_{.y}^2)
-            {cc(.adj)} + (1 | pid)"
-          )))
+  form <- as.formula(str_squish(str_glue("
+            {.y} ~ s(lag_{.y}, k = 3) +
+              s({.x}, k = 3) +
+              s({.x}, k = 3, by = lag_{.y})
+              {cc(.adj)} + (1 | pid)
+            ")))
   brm(form,
       data = .data,
       family = gaussian(),
