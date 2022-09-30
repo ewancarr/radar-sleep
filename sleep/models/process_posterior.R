@@ -6,7 +6,6 @@ library(tidyverse)
 library(here)
 library(marginaleffects)
 source(here("sleep", "models", "init.R"))
-load(here("sleep", "models", "samples", "ids_pre.Rdata"))
 source(here("sleep", "cleaning", "extra", "labels.R"))
 
 # Average marginal effects ----------------------------------------------------
@@ -34,24 +33,39 @@ saveRDS(ame_draws,
 
 # Adjusted predictions --------------------------------------------------------
 
-load(here("sleep", "models", "samples", "relmod_draws.Rdata"))
-load(here("sleep", "models", "samples", "ids_pre.Rdata"))
+load(here("sleep", "models", "samples", "relmod_pre.Rdata"), verbose = TRUE)
+load(here("sleep", "models", "samples", "ids_pre.Rdata"), verbose = TRUE)
 
-post_relmod <- draws_relmod |>
-    map_dfr(~ select(.x$atval, term, adj, xvar, draw)) |>
-    mutate(y = "relmod")
+# Process posterior predictions for 'relmod'
 
-post_ids <- ids_pre |>
-    map_dfr(~ select(.x, term, adj = cov, xvar, draw)) |>
-    mutate(y = "ids")
+relmod_pre <- relmod_pre |>
+  map_dfr("expval", .id = "model") |>
+  separate(model, c("y", "term", "adj"), sep = "__") |>
+  ungroup() |>
+  filter(adj == "adj") |>
+  select(y, term, xvar, .epred)
+  
+# Process posterior predictions for 'IDS-SR'
 
-apre_draws <- bind_rows(post_relmod, post_ids) |>
-  filter(term != "hysom_ever") |>
-  as_tibble()
+ids_pre <- ids_pre |>
+  imap_dfr(function(.fit, .label) {
+         params <- str_split(.label, "__", simplify = TRUE)
+         y <- params[1]
+         x <- params[2]
+         adj <- params[3]
+         # pick <- c("predicted", "conf.low", "conf.high")
+         pred <- .fit[, c("draw", x)]
+         names(pred) <- c("draw", "xvar")
+         pred$term <- x
+         pred$adj <- adj
+         pred$y <- y
+         return(pred)
+  })
+ids_pre <- ids_pre[ids_pre$adj == "adj", ]
+rownames(ids_pre) <- NULL
 
-saveRDS(apre_draws, 
-        file = here("sleep", "models", "processed", "apre_draws.rds"),
-        compress = TRUE)
+save(relmod_pre, ids_pre,
+     file = here("sleep", "models", "processed", "predictions.Rdata"))
 
 # Sensitivity analyses --------------------------------------------------------
 

@@ -12,12 +12,14 @@ library(gtsummary)
 library(marginaleffects)
 library(janitor)
 library(splines)
-verbose <- FALSE
+library(data.table)
 source(here("sleep", "functions.R"), echo = TRUE)
 set_cmdstan_path("~/.cmdstan/cmdstan-2.30.1")
 
-# Set MCMC parameters
-n_iter <- 10000
+# Set parameters
+verbose <- FALSE
+run_sensitivity <- FALSE
+n_iter <- 40000
 options(mc.cores = 20,
         brms.backend = "cmdstanr",
         brms.chains = 4)

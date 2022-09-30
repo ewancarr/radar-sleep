@@ -3,11 +3,7 @@
 # Started:      2022-06-14
 
 source(here::here("sleep", "models", "init.R"), echo = TRUE)
-run_sensitivity <- FALSE
-
-dest <- function(label) {
-  here("sleep", "models", "samples", paste0(label, ".Rdata"))
-}
+source(here("sleep", "functions.R"), echo = TRUE)
 
 d_ids <- filter(dat, pid %in% s2)
 
@@ -21,26 +17,21 @@ opt_ids <- expand_grid(y = c("ids_total", "ids_nosleep"),
 
 do_lm <- function(.y, .x, .adj, .data, ...) {
   form <- as.formula(str_squish(str_glue("
-            {.y} ~ s(lag_{.y}, k = 3) +
-              s({.x}, k = 3) +
-              s({.x}, k = 3, by = lag_{.y})
-              {cc(.adj)} + (1 | pid)
+            {.y} ~ lag_{.y} + I(lag_{.y}^2) + {.x} + I({.x}^2) {cc(.adj)} + (1 | pid)
             ")))
   brm(form,
       data = .data,
       family = gaussian(),
       prior = set_prior("normal(0, 2)", class = "b"),
-      control = list(adapt_delta = 0.999,
-                     step_size = 0.01,
-                     max_treedepth = 15),
       stan_model_args = list(stanc_options = list("O1")),
       threads = n_thread,
+      thin = 10,
       iter = n_iter,
       ...)
 }
 
 fit_ids <- pmap(opt_ids, ~ do_lm(..1, ..2, ..3, d_ids))  
-names(fit_ids) <- pmap_chr(opt_ids, ~ make_names(list(y = ..1, x = ..2, adj = ..3)))
+names(fit_ids) <- make_names(opt_ids)
 save(fit_ids, file = here("sleep", "models", "samples", "ids_fit.Rdata"))
 
 # Process posterior -----------------------------------------------------------
@@ -82,26 +73,16 @@ extract_adjusted_predictions <- function(.model,
   y <- params[, 2]
   x <- params[, 3]
   cov <- params[, 4]
-  # Extract ADJUSTED PREDICTIONS at median value of lag_ids_total
-  at_list <- list()
-  at_list[[x]] <- r
-  at_list[[cluster_var]] <- "new"
-  at_list[["model"]] <- .model
-  nd <- do.call("datagrid", at_list)
-  pre <- predictions(.model,
-                     newdata = nd,
-                     re_formula = NA) |>
+  cat(".")
+  # Construct data frame for predictions 
+  nd <- construct_datagrid(.model, r, x)
+  # Extract predictions
+  predictions(.model, newdata = nd, re_formula = NA) |>
     posteriordraws()
-  names(pre)[which(names(pre) == x)] <- "xvar"
-  pre$term <- x
-  pre$cov <- cov
-  # Return
-  return(pre)
 }
 
 # Average marginal effects ----------------------------------------------------
 
-# NOTE: This takes about 5 minutes.
 ids_ame <- imap(fit_ids, extract_ame, ameby = FALSE) 
 save(ids_ame, file = here("sleep", "models", "samples", "ids_ame.Rdata"))
 rm(ids_ame)
@@ -117,6 +98,8 @@ rm(ids_pre)
 ####        Sensitivity analysis: differences by depression subtype       #####
 ####                                                                      #####
 ###############################################################################
+
+# TODO: rewrite below formula to match above/simpler ones
 
 fit_interaction <- function(.y, .x, .adj, .data,
                             include_interaction = FALSE,
@@ -165,8 +148,10 @@ test_interaction <- function(.y, .x, .adj, .data, ...) {
   return(list(wo = m_wo, wi = m_with))
 }
 
-int_ids <- pmap(opt_ids, ~ test_interaction(..1, ..2, ..3, d_ids))
-names(int_ids) <- make_names(opt_ids)
-save(int_ids, file = dest("ids_int"))
+if (run_sensitivity) {
+  int_ids <- pmap(opt_ids, ~ test_interaction(..1, ..2, ..3, d_ids))
+  names(int_ids) <- make_names(opt_ids)
+  save(int_ids, file = dest("ids_int"))
+}
 
 # END.

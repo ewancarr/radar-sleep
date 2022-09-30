@@ -9,9 +9,7 @@ library(ggdist)
 subset <- FALSE
 load(here("data", "clean", "for_modelling.Rdata"), verbose = TRUE)
 source(here("sleep", "cleaning", "extra", "labels.R"))
-
-apre_draws <- readRDS(here("sleep", "models", "processed", "apre_draws.rds"))
-apre_draws <- filter(apre_draws, adj == "adj")
+load(here("sleep", "models", "processed", "predictions.Rdata"), verbose = TRUE)
 
 lab_rel <- "Relapse\n\n(Predicted\nprobability)"
 lab_ids <- "IDS severity\n\n(Predicted\nscore)"
@@ -26,85 +24,73 @@ subset_draws <- function(d, subset) {
   }
 }
 
-plot_data <- apre_draws |>
-  subset_draws(subset) |>
+plot_data <- 
+  bind_rows(select(relmod_pre, y, term, xvar, prediction = .epred),
+            select(ids_pre, y, term, xvar, prediction = draw)) |>
   left_join(labels, by = c("term" = "x")) |>
   mutate(y_label = factor(y, 
-                          levels = c("relmod", "ids"),
+                          levels = c("rel_mod", "ids_total"),
                           labels = c(lab_rel, lab_ids)))
 
-dummy <- tibble(y_label = unique(plot_data$y_label),
-                xvar = 0) |>
-  mutate(lo = case_when(y_label == lab_rel ~ 0,
-                        y_label == lab_ids ~ 27),
-         hi = case_when(y_label == lab_rel ~ 0.12,
-                        y_label == lab_ids ~ 33)) |>
-  pivot_longer(lo:hi, values_to = "draw")
+# Choose what to plot ---------------------------------------------------------
 
-make_the_plot <- function(d) {
-  ggplot(d) +
+# expval    Draws from expectation of the posterior predictive distribution
+# postpred  Draw from posterior predictive distribution to the data
+
+features <- c("z_tst_med", "zlog_tst_var", "z_smid_med", "z_sfi_med")
+plot_data <- plot_data |>
+  filter(term %in% features) |>
+  mutate(term = factor(term, levels = features),
+         label_orig = reorder(factor(label_orig), as.numeric(term)))
+
+# Plot for relapse ------------------------------------------------------------
+
+p_relapse <- plot_data |>
+  filter(y  == "rel_mod") |>
+  ggplot() +
   aes(x = xvar,
-      y = draw) +
-  stat_lineribbon() +
-  geom_blank(data = dummy) +
-  scale_fill_brewer(palette = "Reds") +
-  scale_color_brewer(palette = "Reds") +
-  facet_grid(cols = vars(label_orig),
-               rows = vars(y_label), 
+      y = prediction) +
+    stat_lineribbon() +
+    scale_fill_brewer(palette = "Reds") +
+    scale_color_brewer(palette = "Reds") +
+    facet_grid(cols = vars(label_orig),
                scale = "free",
                labeller = labeller(label_orig = label_wrap_gen(15))) +
-  theme_ggdist() +
-  facet_title_horizontal() +
-  axis_titles_bottom_left()
-}
+    theme_ggdist() +
+    facet_title_horizontal() +
+    axis_titles_bottom_left() +
+    coord_cartesian(ylim = c(0, 0.25)) +
+    labs(title = "Relapse",
+         x = "Standard deviations difference in sleep feature",
+         y = str_wrap("Predicted probability of relapse", 10)) 
 
-# 1: Sleep duration -----------------------------------------------------------
+# Plot for IDS-SR -------------------------------------------------------------
 
-p1 <- plot_data |>
-  filter(gr == "Duration") |>
-  mutate(draw = if_else(y_label == lab_rel & draw > 0.15, NA_real_, draw)) |>
-  make_the_plot() +
-  labs(title = "Sleep duration",
-       subtitle = "Adjusted predictions from logistic and linear regression models",
-       y = "Adjusted\nprediction",
-       x = "SD difference in sleep measure",
-       fill = "Credible\nintervals")
+p_ids <- plot_data |>
+  filter(y  == "ids_total",
+         term %in% features) |>
+  ggplot() +
+  aes(x = xvar, y = prediction) +
+    stat_lineribbon() +
+    scale_fill_brewer(palette = "Reds") +
+    scale_color_brewer(palette = "Reds") +
+    facet_grid(cols = vars(label_orig),
+               scale = "free",
+               labeller = labeller(label_orig = label_wrap_gen(15))) +
+    theme_ggdist() +
+    facet_title_horizontal() +
+    axis_titles_bottom_left() +
+    coord_cartesian(ylim = c(24, 30)) +
+    scale_y_continuous(breaks = 24:30) +
+    labs(title = "IDS-SR",
+         x = "Standard deviations difference in sleep feature",
+         y = str_wrap("Predicted value of IDS-SR", 10)) 
 
-ggsave(p1, 
+# Combine and save ------------------------------------------------------------
+
+p_combined <- p_relapse / p_ids
+
+ggsave(p_combined,
        filename = here("sleep", "writing", "figures", 
-                       str_glue("apre_duration.png")),
-       dpi = 300, dev = "png", width = 12, height = 10)
-
-# 2: Sleep quality ------------------------------------------------------------
-
-p2 <- plot_data |>
-  filter(gr == "Quality") |>
-  mutate(draw = if_else(y_label == lab_rel & draw > 0.15, NA_real_, draw)) |>
-  make_the_plot() +
-  labs(title = "Sleep quality",
-       subtitle = "Adjusted predictions from logistic and linear regression models",
-       y = "Adjusted\nprediction",
-       x = "SD difference in sleep measure",
-       fill = "Credible\ninterval")
-
-ggsave(p2, 
-       filename = here("sleep", "writing", "figures", 
-                       str_glue("apre_quality.png")),
-       dpi = 300, dev = "png", width = 12, height = 9)
-
-# 3: Sleep regularity ---------------------------------------------------------
-
-p3 <- plot_data |>
-  filter(gr == "Regularity") |>
-  mutate(draw = if_else(y_label == lab_rel & draw > 0.15, NA_real_, draw)) |>
-  make_the_plot() +
-  labs(title = "Sleep regularity",
-       subtitle = "Adjusted predictions from logistic and linear regression models",
-       y = "Adjusted\nprediction",
-       x = "SD difference in sleep measure",
-       color = "Credible\ninterval")
-
-ggsave(p3, 
-       filename = here("sleep", "writing", "figures", 
-                       str_glue("apre_regularity.png")),
-       dpi = 300, dev = "png", width = 14, height = 8)
+                       str_glue("predictions.png")),
+       dpi = 300, dev = "png", width = 10, height = 8)
