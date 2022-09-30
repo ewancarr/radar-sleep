@@ -78,7 +78,7 @@ ids_items <- survey |>
                         (ids_16 %in% 2:3)),
          melancholic_depression = mood_reactivity & (num_trues >= 3))
 
-# Create Re-score IDS to exclude sleep items ----------------------------------
+# Re-score IDS to exclude sleep items -----------------------------------------
 
 ids_items <- ids_items |>
   mutate(ids_total_byhand = sum(c_across(c(ids_1:ids_9, ids_10:ids_30)), na.rm = TRUE),

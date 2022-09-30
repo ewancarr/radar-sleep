@@ -300,7 +300,7 @@ first_nonmissing <- function(x) {
 survey <- survey |>
   arrange(user_id, t) |>
   group_by(user_id) |>
-  mutate(across(c(age, male, edyrs), first_nonmissing),
+  mutate(across(c(age, male, edyrs, partner), first_nonmissing),
          site_dam = site == "AMSTERDAM",
          site_spain = site == "CIBER")
 
@@ -341,6 +341,8 @@ survey <- survey |>
 
 # Merge sleep measures with survey data ---------------------------------------
 
+
+
 merged <- survey |>
   select(user_id, 
          t,
@@ -362,7 +364,6 @@ merged <- survey |>
          site_spain) |>
   group_by(user_id) |>
   arrange(user_id, t) |>
-  fill(partner) |>
   left_join(sleep_vars, by = c("user_id", "t"))
 
 # Calculate change (in sleep measures, IDS total score) -----------------------
@@ -394,7 +395,7 @@ merged <- tidyr::expand(merged, t = seq(3, 24, 3)) |>
          across(c(ids_total, ids_nosleep, son_med, soff_med),
                 dplyr::lag, 1, .names = "lag_{.col}"))
 
-# For others, calcuate difference in clock time
+# For others, calculate difference in clock time
 merged$cm3_son_med <- future_apply(merged[, c("lag_son_med", "son_med")],
                                    1, clock_diff)
 merged$cm3_soff_med <- future_apply(merged[, c("lag_soff_med", "soff_med")],
@@ -409,8 +410,9 @@ merged <- filter(merged, orig & !is.na(user_id))
 merged$cm3_soff_med <- winsor(merged$cm3_soff_med, c(-4, 4))
 
 merged$sol_var <- ifelse(merged$sol_var == 0, 0.001, merged$sol_var)
-merged$smid_rel_var <- ifelse(merged$smid_rel_var == 0, 0.001, merged$smid_rel_var)
-
+merged$smid_rel_var <- ifelse(merged$smid_rel_var == 0, 
+                              0.001, 
+                              merged$smid_rel_var)
 
 ###############################################################################
 ####                                                                      #####
