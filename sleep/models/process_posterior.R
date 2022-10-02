@@ -13,7 +13,7 @@ source(here("sleep", "cleaning", "extra", "labels.R"))
 load(here("sleep", "models", "samples", "relmod_ame.Rdata"), verbose = TRUE)
 load(here("sleep", "models", "samples", "ids_ame.Rdata"), verbose = TRUE)
 
-ame_draws <- bind_rows(map_dfr(ame_relmod, as_tibble, .id = "model"),
+ame_draws <- bind_rows(map_dfr(relmod_ame, as_tibble, .id = "model"),
                        map_dfr(ids_ame, ~ as_tibble(.x$ame), .id = "model")) |>
   separate(model,
            into = c("y", "term", "adj"),
