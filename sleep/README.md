@@ -4,7 +4,7 @@ author: Ewan Carr
 date: 2022-05-26
 ---
 
-# Things to be aware of
+## Things to be aware of
 
 * RADAR surveys take place every 3 months (0, 3, 6, ..., 24).
 * We measure sleep in the 4 weeks prior to each survey.

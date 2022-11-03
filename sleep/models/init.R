@@ -152,3 +152,9 @@ zcov <- c("z_age", "male",
 
 save(dat, sleep_vars, trans, zcov, s1, s2,
      file = here("data", "clean", "for_modelling.Rdata"))
+
+# Save version for Stata
+
+dat |>
+  filter(pid %in% s1) |>
+  haven::write_dta(path = here("data", "clean", "s1.dta"))

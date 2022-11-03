@@ -76,7 +76,7 @@ ids_items <- survey |>
                         (ids_11 %in% 2:3 | ids_13 == 3) +
                         # 6. Self-outlook (ids_16 = 2, 3)
                         (ids_16 %in% 2:3)),
-         melancholic_depression = mood_reactivity & (num_trues >= 3))
+         melancholic_depression = mood_reactivity & (num_trues >= 2))
 
 # Re-score IDS to exclude sleep items -----------------------------------------
 
@@ -92,7 +92,6 @@ survey <- ids_items |>
          melancholic_depression,
          ids_nosleep) |>
   left_join(survey, by = c("user_id", "t"))
-
 
 # Get outcomes from REDCAP.dta ------------------------------------------------
 

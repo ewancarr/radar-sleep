@@ -341,8 +341,6 @@ survey <- survey |>
 
 # Merge sleep measures with survey data ---------------------------------------
 
-
-
 merged <- survey |>
   select(user_id, 
          t,
