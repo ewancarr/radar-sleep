@@ -80,5 +80,3 @@ extract_adjusted_predictions <- function(.model,
   # Return
   return(list(expval = expval, postpred = postpred))
 }
-
-

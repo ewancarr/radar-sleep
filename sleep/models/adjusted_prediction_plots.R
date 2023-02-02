@@ -45,14 +45,15 @@ plot_data <- plot_data |>
 
 # Plot for relapse ------------------------------------------------------------
 
+colors <- c("#ffccbc", "#e64a19")
+
 p_relapse <- plot_data |>
   filter(y  == "rel_mod") |>
   ggplot() +
   aes(x = xvar,
       y = prediction) +
-    stat_lineribbon() +
-    scale_fill_brewer(palette = "Reds") +
-    scale_color_brewer(palette = "Reds") +
+    stat_lineribbon(.width = c(0.5, 0.89)) +
+    scale_fill_manual(values = colors, labels = c("89%", "50%")) +
     facet_grid(cols = vars(label_orig),
                scale = "free",
                labeller = labeller(label_orig = label_wrap_gen(15))) +
@@ -60,9 +61,11 @@ p_relapse <- plot_data |>
     facet_title_horizontal() +
     axis_titles_bottom_left() +
     coord_cartesian(ylim = c(0, 0.25)) +
-    labs(title = "Relapse",
+    labs(title = "Depression relapse",
+         fill = "Credible\nintervals",
          x = "Standard deviations difference in sleep feature",
-         y = str_wrap("Predicted probability of relapse", 10)) 
+         y = str_wrap("Predicted probability of relapse", 10)) +
+    theme(text = element_text(family = "Arial"))
 
 # Plot for IDS-SR -------------------------------------------------------------
 
@@ -71,9 +74,8 @@ p_ids <- plot_data |>
          term %in% features) |>
   ggplot() +
   aes(x = xvar, y = prediction) +
-    stat_lineribbon() +
-    scale_fill_brewer(palette = "Reds") +
-    scale_color_brewer(palette = "Reds") +
+    stat_lineribbon(.width = c(0.5, 0.89)) +
+    scale_fill_manual(values = colors, labels = c("89%", "50%")) +
     facet_grid(cols = vars(label_orig),
                scale = "free",
                labeller = labeller(label_orig = label_wrap_gen(15))) +
@@ -82,9 +84,11 @@ p_ids <- plot_data |>
     axis_titles_bottom_left() +
     coord_cartesian(ylim = c(24, 30)) +
     scale_y_continuous(breaks = 24:30) +
-    labs(title = "IDS-SR",
+    labs(title = "Depression severity (IDS-SR)",
+         fill = "Credible\nintervals",
          x = "Standard deviations difference in sleep feature",
-         y = str_wrap("Predicted value of IDS-SR", 10)) 
+         y = str_wrap("Predicted value of IDS-SR", 10)) +
+    theme(text = element_text(family = "Arial"))
 
 # Combine and save ------------------------------------------------------------
 

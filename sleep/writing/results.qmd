@@ -17,6 +17,8 @@ format:
     toc-depth: 3
     self-contained: true
 bibliography: references.bib
+editor_options: 
+  chunk_output_type: console
 ---
 
 # Introduction
@@ -47,6 +49,11 @@ freq_pct <- function(x, dp = 1) {
     fdp <- function(val) { sprintf(str_glue("%.{dp}f"), val) }
     return(str_glue("{sum(x, na.rm = TRUE)} ({fdp(100 * mean(x, na.rm = TRUE))})"))
 }
+
+switch_decimal <- function(x) {
+  str_replace_all(x, "\\.", "·")
+}
+
 ```
 
 # Methods
@@ -111,9 +118,6 @@ We're adjusting for:
 - Years of education
 - Partnership status
 * Hours of sunshine last month
-* Site
-
-**TODO:** add AUDIT, after resolving query about missing items.
 
 ## Statistical analyses
 
@@ -178,20 +182,60 @@ We will repeat the IDS-SR models after removing the 4 questions about sleep:
 
 ## Excluded participants
 
-Before any exclusions, there are `r nrow(dat)` observations and 
-`r length(unique(dat$user_id))` individuals in the dataset.
+### Before excluding anyone
+
+```{r}
+sleep <- readRDS(here("data", "clean", "sleep.rds"))
+survey <- readRDS(here("data", "clean", "survey.rds"))
+
+print_n(sleep)
+print_n(survey)
+```
+
+###
+
+```{r}
+merged <- readRDS(here("data", "clean", "merged.rds"))
+
+# Specify required variables
+sleep_vars <- c("tst_med", "tst_var", "cm3_tst_med", "cm3_tst_var", "slpeff_med",
+                "sfi_med", "sol_med", "sol_var", "smid_var", "smid_med", "cm3_smid_med",
+                "cm3_smid_var", "sjl")
+id <- c("user_id", "pid", "t", "n_days", "n_weekdays")
+covariates <- c("age", "male",
+                "atyp", "audit",
+                "med_depress", "med_other", "med_sleep",
+                "edyrs", "partner", 
+                "sunshine")
+outcomes <- c("rel", "rel_mod", "rel_5cat", 
+              "ids_total", "lag_ids_total",
+              "ids_nosleep", "lag_ids_nosleep")
+```
+
+Before excluding anyone:
+
+```{r}
+print_n(merged)
+```
 
 After excluding with missing sleep variables:
 
 ```{r}
-cc <- dat |> drop_na(all_of(sleep_vars))
+cc <- merged |> drop_na(all_of(sleep_vars))
+print_n(cc)
+```
+
+After excluding those with less than 8 days/month of sleep data
+
+```{r}
+cc <- filter(cc, n_weekdays >= 8)
 print_n(cc)
 ```
 
 After excluding individuals with missing covariates:
 
 ```{r}
-cc <- cc |> drop_na(all_of(zcov))
+cc <- cc |> drop_na(all_of(covariates))
 print_n(cc)
 ```
 
@@ -212,18 +256,41 @@ print_n(cc2)
 ### Compare excluded participants vs. included
 
 ```{r}
-tab_sup1 <- bind_rows(filter(dat, !(user_id %in% cc2$user_id)) |> mutate(samp = "Excluded"),
+source(here("sleep", "models", "init.R"))
+
+d_relapse <- right_join(dat, s1, by = c("pid", "t"))
+print_n(d_relapse)
+
+d_ids <- right_join(dat, s2, by = c("pid", "t"))
+print_n(d_ids)
+
+compare_excluded <- bind_rows(
+          filter(dat, !(user_id %in% cc2$user_id)) |>  mutate(samp = "Excluded"),
           cc1 |> mutate(samp = "Sample 1"),
-          cc2 |> mutate(samp = "Sample 2")) |>
+          cc2 |> mutate(samp = "Sample 2")
+)
+
+tab_sup1 <- compare_excluded |>
   group_by(samp, pid) |>
   select(samp, age, ids_total, male, partner, edyrs, med_depress) |>
   summarise(across(everything(), first)) |>
   select(-pid) |>
-  tbl_summary(by = samp) |>
+  tbl_summary(by = samp,
+              missing_text = "Missing",
+              label = list(age = "Age",
+                           ids_total = "IDS-SR total score",
+                           male = "Male gender",
+                           edyrs = "Years of education",
+                           partner = "Lives with partner",
+                           med_depress = "Medication (Depression)")) |>
   as_gt() |>
-  tab_header(title = md("**Supplementary Table 1:** Compared excluded vs. included individuals")) 
+  opt_table_font(font = "Arial")
+
+# Table caption
+# Supplementary Table 1: Comparing excluded vs. included individuals
 
 gtsave(tab_sup1, here("sleep", "writing", "tables", "tab_sup1.rtf"))
+tab_sup1
 ```
 
 ## Sample characteristics
@@ -239,16 +306,18 @@ gtsave(tab_sup1, here("sleep", "writing", "tables", "tab_sup1.rtf"))
     surveys.
   - Must have information on covariates.
 
+### Table 1
 
 ```{r}
 baseline <- dat |>
   group_by(pid) |>
   summarise(across(c(age, male, edyrs, partner,
                      med_depress, med_sleep, med_other, audit),
-                   ~ first(na.omit(.x))))
+                   ~ first(na.omit(.x))),
+            .groups = "drop_last")
 
-b1 <- filter(baseline, pid %in% s1) |> mutate(samp = "s1")
-b2 <- filter(baseline, pid %in% s2) |> mutate(samp = "s2")
+b1 <- filter(baseline, pid %in% unique(s1$pid)) |> mutate(samp = "s1")
+b2 <- filter(baseline, pid %in% unique(s2$pid)) |> mutate(samp = "s2")
 
 top <- bind_rows(b1, b2) |>
   group_by(samp) |>
@@ -256,12 +325,12 @@ top <- bind_rows(b1, b2) |>
             across(c(male, partner, 
                      med_depress, med_sleep, med_other), freq_pct, 0)) |>
   pivot_longer(-samp) |>
-  pivot_wider(names_from = samp)
+  pivot_wider(names_from = samp) |>
+  mutate(across(c(s1, s2), switch_decimal))
 
-d1 <- filter(dat, pid %in% s1) |> mutate(samp = "s1")
-d2 <- filter(dat, pid %in% s2) |> mutate(samp = "s2")
-
-bottom <- bind_rows(d1, d2) |>
+d_relapse$samp <- "s1"
+d_ids$samp <- "s2"
+bottom <- bind_rows(d_relapse, d_ids) |>
     group_by(samp) |>
     summarise(n_obs = str_glue("{n()}"),
               rel_mod = freq_pct(rel_mod),
@@ -269,7 +338,8 @@ bottom <- bind_rows(d1, d2) |>
     pivot_longer(-samp)  |>
     pivot_wider(names_from = samp) |>
     mutate(s1 = if_else(name == "det", str_glue("--"), s1),
-           s2 = if_else(name == "rel_mod", str_glue("--"), s2))
+           s2 = if_else(name == "rel_mod", str_glue("--"), s2),
+           across(c(s1, s2), switch_decimal))
 
 row_labels <- data.frame(name = c("age", "edyrs", "male", "partner",
                                   "med_depress", "med_sleep", "med_other",
@@ -293,27 +363,35 @@ tab_1 <- bind_rows(top, bottom) |>
     left_join(row_labels, by = "name") |>
     select(-name, -type) |>
     gt(rowname_col = "label") |>
-    tab_header(title = md("**Table 1:** Characteristics of analytical samples")) |>
+    cols_align(align = "right", columns = c(s1, s2)) |>
     tab_row_group(label = md("*Outcomes over follow-up*"),
                   rows = row_labels$label[9:11]) |>
     tab_row_group(label = md("*Participant characteristics at enrolment*"),
                  rows = row_labels$label[1:8]) |>
     tab_spanner(label = "Sample 1", columns = s1) |>
     tab_spanner(label = "Sample 2", columns = s2) |>
-    cols_label(s1 = str_glue("n={length(unique(d1$pid))} individuals"),
-               s2 = str_glue("n={length(unique(d2$pid))} individuals")) |>
+    cols_label(s1 = str_glue("n={length(unique(d_relapse$pid))} individuals"),
+               s2 = str_glue("n={length(unique(d_ids$pid))} individuals")) |>
     opt_row_striping() |>
     tab_footnote(footnote = "Median (IQR).",
                  locations = cells_stub(rows = row_labels[row_labels$type == "c", ]$label)) |>
     tab_footnote(footnote = "N (%).",
                  locations = cells_stub(rows = row_labels[row_labels$type == "b", ]$label)) |>
-    tab_footnote(footnote = "Note: EXPLAIN THAT THE SAMPLES OVERLAP.",
+    tab_footnote(footnote = "Note that these are overlapping samples. Participants in Sample 1 who also had at least one assessment of IDS-SR were also included in Sample 2.",
                  locations = cells_column_spanners()) |>
-    tab_options(footnotes.marks = c("*", "†", "‡"))
+    tab_footnote(footnote = "Due to the definition of relapse, which excluded participants with chronic depression, participants in Sample 1 tended to report lower depression severity and lower use of antidepressant medication compared to Sample 2.",
+                 locations = cells_body(rows = 11),
+                 placement = "right") |>
+    tab_options(footnotes.marks = c("*", "†", "‡", "§")) |>
+    tab_style(style = cell_text(align = 'center'), locations = cells_column_labels()) |>
+  opt_table_font(font = "Arial")
 
-gtsave(tab_1, here("sleep", "writing", "tables", "tab_1.rtf"))
+# Table caption:
+# Table 1: Characteristics of analytical samples
+gtsave(tab_1,
+       here("sleep", "writing", "tables", "tab_1.html"))
+
 tab_1
-
 ```
 
 
@@ -334,12 +412,12 @@ la <- labels |>
   select(x, label = label_orig)
 lb <- select(labels, x, label = label_trans)
 
-plot_data <- d2 |>
+plot_data <- cbind(as.data.frame(scale_variables(d_ids)), d_ids) |>
   select(user_id, all_of(trans), all_of(untrans)) |>
   drop_na(tst_med) |>
   pivot_longer(-user_id) |>
   left_join(bind_rows(la, lb), by = c("name" = "x"))
-
+  
 spec <- list(p1 = list(title = "Sleep duration",
                        vars = c("z_tst_med", "z_cm3_tst_med",
                                 "zlog_tst_var", "z_cm3_tst_var"),
@@ -428,7 +506,7 @@ presents the 50% and 89% credible intervals.
 The x-axis represents:
 
 - For relapse and deterioration, the percentage point change per 1 SD
-  differencen in each sleep measure.
+  difference in each sleep measure.
 - For IDS-SR, the change in total score per 1 SD difference in each sleep
   measure.
 
@@ -447,30 +525,64 @@ ame_draws <- ame_draws |>
   mutate(estimate = if_else(y_label == "Relapse",
                             estimate * 100, estimate))
 
-ame_draws |>
-  filter(term %in% trans) |>
-  ggplot() +
+# Labels
+# title: "Average marginal effects"
+# subtitle: "Per 1 SD difference/change in each sleep measure"
+
+make_plot <- function(d) {
+  d$full_label <- if_else(d$y == "rel_mod",
+                          "Depression relapse",
+                          "Depression severity")
+  ggplot(d) +
   aes(x = estimate,
       y = label_orig,
       color = adj) +
   geom_vline(xintercept = 0, color = pal[[1]], alpha = 0.5) +
   stat_pointinterval(.width = c(0.89, 0.50),
                      position = position_dodge(width = 0.5)) +
-  facet_grid(cols = vars(y_label),
+  facet_grid(cols = vars(full_label),
              rows = vars(gr),
              space = "free_y",
              scales = "free") +
   theme_ggdist() + 
   scale_color_manual(values = c(pal[[2]], pal[[3]])) +
   theme(strip.text.y = element_text(angle = 0),
+        text = element_text(family = "Arial"),
         panel.border = element_rect(color = "gray90", fill = NA, size = 1),
         strip.background = element_rect(fill = "gray90"),
+        strip.text.x = element_text(size = 11, face = "bold"),
         legend.title = element_blank(),
-        axis.title.y = element_blank()) +
-  labs(title = "Average marginal effects",
-       x = "Average marginal effect",
-       subtitle = "Per 1 SD difference/change in each sleep measure")
+        axis.title.y = element_blank(),
+        axis.text = element_text(size = 10),
+        plot.margin = margin(0, 0, 0.2, 0.2, "cm"))
+}
 
+left_plot <- ame_draws |>
+  filter(term %in% trans,
+         y == "rel_mod") |>
+  make_plot() +
+  labs(x = "Percentage points") +
+  theme(legend.position = "none",
+  strip.text.y = element_blank())
+
+right_plot <- ame_draws |>
+  filter(term %in% trans,
+         y == "ids_total") |>
+  make_plot() +
+  labs(x = "IDS-SR score") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+
+ame_plot <- left_plot + right_plot + plot_layout(widths = c(1, 0.95))
+
+ggsave(ame_plot,
+       file = here("sleep", "writing", "figures", "ame_plot.png"),
+       dev = "png",
+       width = 10,
+       height = 8,
+       dpi = 300)
+
+print(ame_plot)
 ```
 
 :::{.column-page}
@@ -478,13 +590,18 @@ ame_draws |>
 
 ```{r}
 #| tbl-cap: "Supplementary Table: Average Marginal Effects"
-
 table_data <- ame_draws |>
   group_by(gr, y_label, label_orig, adj) |>
-  median_qi(estimate) |>
-  mutate(cell = str_glue("{sprintf('%.3f', estimate)} [{sprintf('%.3f', .lower)}, {sprintf('%.3f', .upper)}]"))
+  median_qi(estimate,
+            .width = 0.89) |>
+  mutate(cell = paste0(sprintf('%.1f', estimate),
+                       " [",
+                       sprintf('%.1f', .lower),
+                       ", ",
+                       sprintf('%.1f', .upper),
+                       "]"))
 
-table_data |>
+tab_ame <- table_data |>
   select(gr, label_orig, y_label, adj, cell) |>
   pivot_wider(names_from = c(y_label, adj),
               values_from = cell) |>
@@ -492,6 +609,7 @@ table_data |>
   gt() |>
   tab_spanner(label = "Relapse", columns = starts_with("Relapse_")) |>
   tab_spanner(label = "IDS-SR", columns = starts_with("IDS-SR_")) |>
+  cols_align(align = "center", columns = everything()) |>
   cols_align(align = "left", columns = label_orig) |>
   cols_label(label_orig = "",
              Relapse_Unadjust. = "Unadj.",
@@ -501,7 +619,11 @@ table_data |>
   tab_style(style = list(cell_text(weight = "bold")),
             locations = list(cells_row_groups(),
                              cells_title(),
-                             cells_column_spanners()))
+                             cells_column_spanners())) |>
+  opt_table_font(font = "Arial") |>
+  fmt_markdown(columns = everything())
+
+tab_ame
 ```
 
 :::
@@ -517,6 +639,7 @@ The idea would be to present (a) all of these in supplementary materials; (b) a
 smaller selection in the main text (e.g. a 2x2 grid to demonstrate typical
 results).
 
+# Adjusted predictions
 
 
 ## Sensitivity analysis
@@ -550,8 +673,23 @@ comparison |>
          how_much = with_int - no_int) |>  
   separate(model, c("y", "x", "adj"), "__") |>
   left_join(labels, by = "x") |>
-    select(label_orig, y, improvement, how_much) |>
-  gt()
+  filter(adj == "adj") |>
+  select(gr, label_orig, how_much) |>
+  mutate(how_much = sprintf("%.2f", how_much),
+         gr = paste("Sleep", gr)) |>
+  group_by(gr) |>
+  gt() |>
+  cols_label(label_orig = "",
+             how_much = "Relapse") |>
+  cols_align(align = "right", columns = everything()) |>
+  cols_align(align = "left", columns = label_orig) |>
+  tab_style(style = list(cell_text(weight = "bold")),
+            locations = list(cells_row_groups(),
+                             cells_title(),
+                             cells_column_spanners())) |>
+  opt_table_font(font = "Arial") |>
+  fmt_markdown(columns = everything())
+  
 ```
 
 ### 2. Remove sleep items from IDS-SR
@@ -560,38 +698,44 @@ The results are slightly attenuated, but conclusions unchanged.
 
 ```{r}
 #| tbl-cap: "Supplementary Table: Average Marginal Effects for IDS-SR without sleep items"
-ame_nosleep <- readRDS(here("sleep", "models", "processed",
-                            "ame_nosleep.rds")) |>
-  mutate(y_label = factor(y, levels = c("ids_total", "ids_nosleep")),
-         gr = paste("Sleep\n", gr),
-         estimate = if_else(y_label == "Relapse",
-                            estimate * 100, estimate))
 
-table_data <- ame_nosleep |>
-  group_by(gr, y_label, label_orig, adj) |>
-  median_qi(estimate) |>
+ids_orig <- readRDS(here("sleep", "models",
+                          "processed", "ame_draws.rds")) |>
+  filter(y == "ids_total") |>
+  mutate(gr = paste("Sleep\n", gr),
+         y = "A")
+
+ids_nosleep <-  readRDS(here("sleep", "models", "processed",
+                                  "ame_nosleep.rds")) |>
+  filter(y == "ids_nosleep") |>
+  mutate(gr = paste("Sleep\n", gr),
+         y = "B")
+
+table_data <- bind_rows(ids_orig, ids_nosleep) |>
+  group_by(gr, y, label_orig, adj) |>
+  median_qi(estimate, .width = 0.89) |>
   mutate(cell = str_glue("{sprintf('%.3f', estimate)} [{sprintf('%.3f', .lower)}, {sprintf('%.3f', .upper)}]"))
 
 table_data |>
-  select(gr, label_orig, y_label, adj, cell) |>
-  pivot_wider(names_from = c(y_label, adj),
+  select(gr, label_orig, y, adj, cell) |>
+  pivot_wider(names_from = c(y, adj),
               values_from = cell) |>
   group_by(gr) |>
   gt() |>
-  tab_spanner(label = "IDS-SR\nOriginal scale",
-              columns = starts_with("ids_total")) |>
-  tab_spanner(label = "IDS-SR\nSleep items removed",
-              columns = starts_with("ids_nosleep")) |>
+  tab_spanner(label = md("**IDS-SR**<br>*Original scale*"),
+              columns = starts_with("A")) |>
+  tab_spanner(label = md("**IDS-SR**<br>*Sleep items removed*"),
+              columns = starts_with("B")) |>
   cols_label(label_orig = "",
-             `ids_total_Unadjust.` = "Unadj.",
-             `ids_total_Adjusted` = "Adj.",
-             `ids_nosleep_Unadjust.` = "Unadj.",
-             `ids_nosleep_Adjusted` = "Adj.") |>
+             `A_Unadjust.` = "Unadj.",
+             `A_Adjusted` = "Adj.",
+             `B_Unadjust.` = "Unadj.",
+             `B_Adjusted` = "Adj.") |>
   cols_align(align = "left", columns = label_orig) |>
   tab_style(style = list(cell_text(weight = "bold")),
             locations = list(cells_row_groups(),
-                             cells_title(),
-                             cells_column_spanners()))
+                             cells_title())) |>
+  opt_table_font(font = "Arial")
 ```
 
 

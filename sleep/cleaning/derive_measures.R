@@ -21,7 +21,7 @@ survey <- readRDS(here("data", "clean", "survey.rds"))
 
 # Merge 3-monthly survey data with sleep data ---------------------------------
 
-# For a given window (e.g. 4 weeks), create a dataframe for each individual
+# For a given window (e.g. 4 weeks), create a data frame for each individual
 # containing the dates within that window. We then merge these dates with the 
 # corresponding sleep data.
 
@@ -55,48 +55,27 @@ lookup_table <- survey |>
 
 sleep_4w <- left_join(lookup_table,
                       sleep,
-                      by = c("user_id", "merge_date"))
-
-# windows <- list(prev_2w = c(-2, 0),
-#                 first_month = c(-12, -8),
-#                 last_month = c(-4, 0))
-
-# Select only observations with minimum required days of data -----------------
-
-# NOTE: this is set to a minimum number of WEEKDAYS.
-min_weekdays <- 5
-
-# Count the number of days per 3-monthly period
-n_days <- sleep_4w |>
-  group_by(user_id, t) |>
-  drop_na(total_sleep_time) |>
-  summarise(n_weekdays = sum(!(lubridate::wday(unique(merge_date),
-                                               label = TRUE) %in% weekend)),
-            n_days = length(unique(merge_date)))
-
-sel <- n_days |> 
-  right_join(sleep_4w, by = c("user_id", "t")) |>
-  filter(n_weekdays >= min_weekdays)
+                      by = c("user_id", "merge_date"),
+                      multiple = "all")
 
 # Select/rename required variables --------------------------------------------
 
-sel <- select(sel,
-              user_id,
-              t,
-              n_days,
-              merge_date,
-              next_day,
-              tst = total_sleep_time,
-              tib = time_in_bed,
-              slpeff = sleep_efficiency,
-              sol,
-              start_sleep,
-              stop_sleep,
-              son = sleep_onset,
-              soff = sleep_offset,
-              insom = insomnia,
-              hysom = hypersomnia,
-              awak = awakenings)
+sel <- sleep_4w |>
+  select(user_id,
+         t,
+         merge_date,
+         next_day,
+         tst = total_sleep_time,
+         tib = time_in_bed,
+         slpeff = sleep_efficiency,
+         sol,
+         start_sleep,
+         stop_sleep,
+         son = sleep_onset,
+         soff = sleep_offset,
+         insom = insomnia,
+         hysom = hypersomnia,
+         awak = awakenings)
 
 # Select a single sleep event per day -----------------------------------------
 
@@ -107,14 +86,31 @@ sel <- select(sel,
 # Not ideal, but arguably better than combining sleep events, esp. when it 
 # isn't straightforward (e.g. the mean of two sleep onsets).
 
-sel <- drop_na(sel, user_id, merge_date, tst)
-setDT(sel)[,
-           c("n_events", "longest") := .(.N, max(tst, na.rm = TRUE)),
-           by = .(user_id, merge_date)]
-sel <- sel[tst == longest, head(.SD, 1), by = .(user_id, merge_date)]
+sel <- sel |>
+  drop_na(user_id, merge_date, tst) |>
+  group_by(user_id, merge_date) |>
+  mutate(longest_sleep_event = max(tst, na.rm = TRUE)) |>
+  filter(tst == longest_sleep_event) |>
+  distinct(user_id, t, merge_date, .keep_all = TRUE)
 
-# Check: this should contain 0 rows
-sel[, by = .(user_id, merge_date), count := .N][count > 1, ]
+stopifnot(nrow(sel) == nrow(distinct(sel, user_id, t, merge_date)))
+
+# Count the number of days/month where sleep information is provided ----------
+
+sel <- sel |>
+  group_by(user_id, t) |>
+  mutate(n_weekdays = sum(!(lubridate::wday(unique(merge_date),
+                                            label = TRUE) %in% weekend)),
+         n_days = length(unique(merge_date))) |>
+  ungroup()
+
+# Remove time periods with fewer than 5 days of data ---------------------------
+
+sel <- filter(sel, n_weekdays >= 5)
+
+# Convert to data.table -------------------------------------------------------
+
+sel <- setDT(sel)
 
 # Total sleep time / time in bed ----------------------------------------------
 
@@ -198,7 +194,7 @@ sjl <- sjl[, .(user_id, t, weekend, mid_sjl)]
 sjl <- dcast(sjl, ... ~ weekend, value.var = "mid_sjl")
 sjl[, sjl := `TRUE` - `FALSE`]
 
-# Winsorize extreme values
+# Winsorise extreme values
 sjl$sjl <- winsor(sjl$sjl, c(-5, 5))
 
 # Merge with other sleep measures
@@ -212,12 +208,13 @@ sel <- merge(sel, sjl, all.x = TRUE, by = c("user_id", "t"))
 sel$awake_2am <- (lubridate::hour(sel$start_sleep) < 2) & 
                  (lubridate::hour(sel$stop_sleep) > 2)
 
-
 # Summarise sleep measures for this time period -------------------------------
 
 # Select weekdays only
 sel$day <- as.character(lubridate::wday(sel$merge_date, label = TRUE))
-sel <- sel[!(day %chin% weekend)]
+sel <- sel[!(day %chin% weekend)] # NOTE: we're treating Friday and Saturday 
+                                  # night as the weekend. So Sunday night 
+                                  # is included.
 
 # Derive 'median sleep midpoint', needed when summarising, below.
 sel[, by = .(user_id, t), smid_med := median(smid, na.rm = TRUE)]
@@ -227,6 +224,8 @@ sleep_vars <- sel[,
                   by = .(user_id, t),
                   .(# First non-missing value
                     sjl = first(na.omit(sjl)),
+                    n_days = first(na.omit(n_days)),
+                    n_weekdays = first(na.omit(n_weekdays)),
                     # Maximum 
                     hysom_ever = max(hysom, na.rm = TRUE),
                     # Median
@@ -319,7 +318,7 @@ survey <- survey |>
 #   The presence of MDD during follow-up will be defined as meeting criteria
 #   for MDD according to the Wold Health Organisation’s Composite International
 #   Diagnostic Interview - Short Form (CIDI-SF; [44]). [...] Additionally, a
-#   score of > 25 on the the Inventory of Depressive Symptomatology –
+#   score of > 25 on the the Inventory of Depressive Symptomatology –
 #   Self-Reported (IDS-SR; [45]) will be required to establish that the
 #   severity of the depressive episode is at least moderate.
 #
@@ -362,7 +361,7 @@ merged <- survey |>
          site_spain) |>
   group_by(user_id) |>
   arrange(user_id, t) |>
-  left_join(sleep_vars, by = c("user_id", "t"))
+  full_join(sleep_vars, by = c("user_id", "t"))
 
 # Calculate change (in sleep measures, IDS total score) -----------------------
 

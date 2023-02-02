@@ -24,7 +24,10 @@ extract_ame <- function(.model, .label) {
 ####                                                                      #####
 ###############################################################################
 
-d_relapse <- filter(dat, pid %in% s1) |> drop_na(rel_mod)
+# Select sample ---------------------------------------------------------------
+
+d_relapse <- right_join(dat, s1, by = c("pid", "t"))
+d_relapse <- bind_cols(d_relapse, scale_variables(d_relapse))
 
 # Specify models --------------------------------------------------------------
 

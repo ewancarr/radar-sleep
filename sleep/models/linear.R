@@ -5,7 +5,10 @@
 source(here::here("sleep", "models", "init.R"), echo = TRUE)
 source(here("sleep", "functions.R"), echo = TRUE)
 
-d_ids <- filter(dat, pid %in% s2)
+# Specify sample --------------------------------------------------------------
+
+d_ids <- right_join(dat, s2, by = c("pid", "t"))
+d_ids <- bind_cols(d_ids, scale_variables(d_ids))
 
 # Specify models --------------------------------------------------------------
 

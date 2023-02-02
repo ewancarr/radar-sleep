@@ -13,7 +13,6 @@ library(naniar)
 load(here("data", "clean", "merged.Rdata"), verbose = TRUE)
 
 
-
 ###############################################################################
 ####                                                                      #####
 ####                                Table 1                               #####

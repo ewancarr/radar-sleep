@@ -25,6 +25,10 @@ options(mc.cores = 20,
         brms.chains = 4)
 n_thread <- threading(5)
 
+# Set minimum number of WEEKDAYS ----------------------------------------------
+
+min_weekdays <- 8
+
 # Functions -------------------------------------------------------------------
 
 make_names <- function(i) {
@@ -64,7 +68,7 @@ sleep_vars <- c("tst_med",
                 "cm3_smid_var",
                 "sjl")
      
-id <- c("user_id", "pid", "t")
+id <- c("user_id", "pid", "t", "n_days", "n_weekdays")
 
 covariates <- c("age", "male",
                 "atyp", "audit",
@@ -79,42 +83,39 @@ dat <- merged |>
   ungroup() |> 
   select(all_of(c(id, outcomes, sleep_vars, covariates)))
 
-# Select analytical samples ---------------------------------------------------
+# Select analytical samples ----------------------------------------------------
 
-s1 <- drop_na(dat,
-              rel_mod,
-              all_of(c(covariates,
-                       sleep_vars))) |>
-  pluck("pid") |> unique()
-print(length(s1))
+select_sample <- function(.data, .days, ...) {
+  .data |>
+    drop_na(...,
+            all_of(covariates),
+            all_of(sleep_vars)) |>
+    filter(n_weekdays >= min_weekdays) |>
+    select(pid, t)
+}
 
-s2 <- drop_na(dat,
-              ids_total,
-              lag_ids_total,
-              all_of(c(covariates,
-                       sleep_vars))) |>
-  pluck("pid") |> unique()
-print(length(s2))
+s1 <- select_sample(.data = dat, .days = 8, rel_mod)
+s2 <- select_sample(.data = dat, .days = 8, ids_total, lag_ids_total)
 
 # Scale continuous variables --------------------------------------------------
- 
-transformed <- dat |>
-  select(all_of(c(sleep_vars, "age", "edyrs", "sunshine", "audit"))) |>
-  ungroup() |>
-  mutate(across(where(~ is.numeric(.x) & min(.x, na.rm = TRUE) > 0),
-                ~ scale(log(.x)),
-                .names = "zlog_{.col}"),
-         across(where(is.numeric),
-                ~ as.numeric(scale(.x)),
-                .names = "z_{.col}")) |>
-  select(-all_of(sleep_vars),
-         -age,
-         -edyrs,
-         -audit,
-         -sunshine,
-         -starts_with("z_zlog"))
 
-dat <- bind_cols(dat, transformed)
+scale_variables <- function(d) {
+  select(d, 
+         all_of(c(sleep_vars, "age", "edyrs", "sunshine", "audit"))) |>
+    ungroup() |>
+    mutate(across(where(~ is.numeric(.x) & min(.x, na.rm = TRUE) > 0),
+                  ~ scale(log(.x)),
+                  .names = "zlog_{.col}"),
+           across(where(is.numeric),
+                  ~ as.numeric(scale(.x)),
+                  .names = "z_{.col}")) |>
+    select(-all_of(sleep_vars),
+           -age,
+           -edyrs,
+           -audit,
+           -sunshine,
+           -starts_with("z_zlog"))
+}
 
 # Select transformations to use in models -------------------------------------
 
@@ -152,9 +153,3 @@ zcov <- c("z_age", "male",
 
 save(dat, sleep_vars, trans, zcov, s1, s2,
      file = here("data", "clean", "for_modelling.Rdata"))
-
-# Save version for Stata
-
-dat |>
-  filter(pid %in% s1) |>
-  haven::write_dta(path = here("data", "clean", "s1.dta"))
