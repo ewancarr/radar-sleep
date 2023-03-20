@@ -66,28 +66,39 @@ rownames(ids_pre) <- NULL
 save(relmod_pre, ids_pre,
      file = here("models", "processed", "predictions.Rdata"))
 
-# Sensitivity analyses --------------------------------------------------------
+# Sensitivity analyses ---------------------------------------------------------
 
-# 1. Differences by depression subtype
+# 1. Differences by depression subtype -----------------------------------------
 
-load(here("sleep", "models", "samples", "relmod_int.Rdata"), verbose = TRUE)
+# relmod, then add LOO criterion
+load(here("models", "samples", "relmod_int.Rdata"), verbose = TRUE)
 
-# with_loo <- map(int_relmod, ~ map(.x, add_criterion, "loo", moment_match = TRUE))
-with_loo <- map(int_relmod, 
-                ~ map(.x, add_criterion, "loo"))
+int_relmod <- map(int_relmod, 
+                  ~ map(.x, add_criterion, "loo", moment_match = TRUE))
 
-comparison <- map_dfr(with_loo, ~ loo_compare(.x$wo, .x$wi) |> 
-                      as.data.frame() |>
-                      rownames_to_column(),
-                      .id = "model") |>
+# ids
+ids_int <- readRDS(here("models", "samples", "ids_int.rds"))
+
+# Combine both sets of interaction models (ids and relmod) into a single list
+int <- append(ids_int, int_relmod)
+rm(ids_int, int_relmod)
+
+# Extract ELPDs from LOO, comparing model with vs. without the interaction term
+
+comparisons <- int |>
+  map_dfr(function(i) {
+    i <- map(i, add_criterion, "loo", moment_match = TRUE)
+    loo_compare(i$wo, i$wi) |>
+      as_tibble() |>
+      rownames_to_column()
+  }, 
+  .id = "model") |>
   select(model, rowname, elpd_diff) |>
-  pivot_wider(names_from = rowname, values_from = elpd_diff) |>
-  select(model, no_int = `.x$wo`, with_int = `.x$wi`)
-
-saveRDS(comparison, file = here("sleep", "models", "processed",
-                                "by_atypical.rds"))
+    pivot_wider(names_from = rowname, values_from = elpd_diff)
+    
+saveRDS(comparisons, file = here("models", "processed", "by_atypical.rds"))
   
-# 2. Remove sleep items from RDS
+# 2. Remove sleep items from RDS -----------------------------------------------
 
 saveRDS(ame_nosleep,
         file = here("models", "processed", "ame_nosleep.rds"),

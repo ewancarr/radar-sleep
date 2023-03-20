@@ -102,8 +102,6 @@ rm(ids_pre)
 ####                                                                      #####
 ###############################################################################
 
-# TODO: rewrite below formula to match above/simpler ones
-
 fit_interaction <- function(.y, .x, .adj, .data,
                             include_interaction = FALSE,
                             modifier = "atyp",
@@ -111,23 +109,20 @@ fit_interaction <- function(.y, .x, .adj, .data,
   if (include_interaction) {
     form <- as.formula(str_squish(str_glue(
               "{.y} ~ lag_{.y} + 
-              I(lag_{.y}^2) +
-              {modifier} +
-              {.x} + I({.x}^2) +
-              {.x}:lag_{.y} + {.x}:I(lag_{.y}^2) +
-              I({.x}^2):lag_{.y} + I({.x}^2):I(lag_{.y}^2)
-              {cc(.adj)} + (1 | pid)"
-            )))
+                      I(lag_{.y}^2) +
+                      {.x} + I({.x}^2) +
+                      {modifier} +
+                      {.x}:{modifier} + I({.x}^2):{modifier}
+                      {cc(.adj)} + (1 | pid)"
+    )))
   } else {
     form <- as.formula(str_squish(str_glue(
               "{.y} ~ lag_{.y} + 
-              I(lag_{.y}^2) +
-              {modifier} +
-              {.x}:{modifier} + I({.x}^2):{modifier} +
-              {.x}:lag_{.y}:{modifier} + {.x}:I(lag_{.y}^2):{modifier} +
-              I({.x}^2):lag_{.y}:{modifier} + I({.x}^2):I(lag_{.y}^2):{modifier}
-              {cc(.adj)} + (1 | pid)"
-            )))
+                      I(lag_{.y}^2) +
+                      {.x} + I({.x}^2) +
+                      {modifier}
+                      {cc(.adj)} + (1 | pid)"
+              )))
   }
   fit <- brm(form,
              data = .data,
