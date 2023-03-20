@@ -1,0 +1,359 @@
+---
+title: Methodological supplement
+author: Ewan Carr
+date: 2023-03-03
+date-format: short
+format:
+  pdf:
+    pdf-engine: "xelatex"
+    number-sections: true
+    number-depth: 3
+    toc: true
+    keep-md: true
+    mainfont: "Times New Roman"
+    sansfont: "Times New Roman"
+editor: 
+  markdown: 
+    wrap: 72
+bibliography: supplement.bib
+editor_options: 
+  chunk_output_type: console
+---
+
+\clearpage
+
+```{r setup}
+#| message: false
+#| echo: false
+#| results: hide
+source(here::here("models", "init.R"), echo = FALSE)
+source(here::here("cleaning", "extra", "labels.R"), echo = FALSE)
+library(gt)
+library(ggmcmc)
+library(brms)
+library(knitr)
+theme_set(theme_ggdist())
+theme_update(text = element_text(family = "serif"))
+knitr::opts_chunk$set(cache = FALSE, warning = FALSE, 
+                      message = FALSE, cache.lazy = FALSE)
+```
+
+# Measures
+
+## Sleep features
+
+We considered 13 sleep features, organised into three domains:
+
+| Domain           | Feature                               | Definition                                                                                                                                                                                          |
+|-------------------------|----------------------|-------------------------|
+| Sleep duration   | Total sleep time†                     | Median daily hours spent asleep.                                                                                                                                                                    |
+|                  | Change in total sleep time‡           | Difference in median daily hours spent asleep over the four weeks before the current outcome assessment (T2) versus the four weeks before to the previous outcome assessment three months ago (T1). |
+|                  | Total sleep time, variance†           | Intra-individual variance in median daily hours spent asleep.                                                                                                                                       |
+|                  | Change in total sleep time, variance‡ | Difference in intra-individual variance in median daily hours asleep from T2 to T1.                                                                                                                 |
+| Sleep quality    | Sleep efficiency†                     | Median hours spent asleep as a proportion of hours spent in bed per day.                                                                                                                            |
+|                  | Sleep fragmentation index†            | Median daily number of awakenings per hour of sleep.                                                                                                                                                |
+|                  | Sleep onset latency†                  | Median time between last recorded step taken and Fitbit-derived sleep onset each day.                                                                                                               |
+|                  | Sleep onset latency variance†         | Intra-individual variance in median sleep onset.                                                                                                                                                    |
+| Sleep regularity | Sleep midpoint†                       | Median midpoint between sleep onset and sleep offset.                                                                                                                                               |
+|                  | Sleep midpoint, variance†             | Intra-individual variance in median sleep midpoint.                                                                                                                                                 |
+|                  | Change in sleep midpoint‡             | Difference in median sleep midpoint from T2 to T1.                                                                                                                                                  |
+|                  | Change in sleep midpoint variance‡    | Difference in intra-individual variance in median sleep midpoint from T2 to T1.                                                                                                                     |
+|                  | Social jet lag†                       | Absolute difference between weekday and weekend sleep midpoints.                                                                                                                                    |
+
+† Measured over the four weeks prior to each outcome assessment.\
+‡ Measured as the change between the four weeks before the current
+outcome assessment (T2) and the four weeks before the previous outcome
+assessment three months ago (T1)
+
+Each feature was derived based on information collected in the 4 weeks
+prior to the 3-monthly outcome assessment. For features measuring a
+change in sleep (e.g., Δ total sleep time), we calculated the difference
+between sleep over the past 4 weeks and sleep in the same period at the
+previous outcome assessment:
+
+![](figures/explain_windows.png){fig-align="center"}
+
+### Derivation of daily sleep features
+
+-   Sleep was continuously recorded by FitBit devices and summarised as
+    a daily measure.
+
+-   On most days, participants had a single 'sleep event' (i.e., a
+    continuous episode of sleep). However, on around 10% of days
+    participants recorded multiple sleep events. On those days, we used
+    information for the primary sleep event only, identified as the
+    largest continuous sleep event. Shorter sleep events (e.g., naps)
+    were discarded.
+
+Most sleep features were derived directly from the FitBit data (e.g.,
+total hours of sleep), but some required further processing:
+
+-   **Onset latency** refers to the time between going to bed and
+    falling asleep (sleep onset). We derived this by combining
+    information on sleep with information on physical activity.
+    Specifically, we defined onset latency as the period between the
+    last step recorded (via FitBit) and the onset of sleep (via FitBit).
+
+![](figures/deriving_onset_latency.png){fig-align="center"}
+
+### Derivation of sleep features in the four weeks before each outcome assessment
+
+-   We derived sleep features by summarising the daily measures over the
+    four weeks before each 3-monthly outcome assessment. Each feature
+    represented the median or variance of the available daily values.
+
+-   We used information for weekdays only (with the exception of "social
+    jetlag") to avoid overestimating variability due to differences
+    between weekdays versus weekends.
+
+-   At each 3-monthly assessment, we included participants who provided
+    sleep information on at least 8 (non-consecutive) weekdays over the
+    previous four weeks. We chose a minimum of 8 weekdays to provide
+    reliable summaries whilst minimising selection bias (participants
+    wearing their FitBit for more than eight days tended to have lower
+    depressive symptoms and more stable sleep patterns).
+
+-   "Social jet lag" was calculated as the difference in the mean sleep
+    midpoints for weekdays versus weekends.
+
+## Covariates
+
+We considered four covariates measured at enrolment:
+
+-   Male gender (0/1);
+-   Partnership status (0/1);
+-   Years of age (continuous);
+-   Years of education (continuous).
+
+And four covariates measured repeatedly at each three-monthly outcome
+assessment:
+
+-   Atypical depression subtype;
+-   Current medication use;
+-   Alcohol use;
+-   Hours of daylight;
+
+### Atypical depression
+
+Following @novick2005, we defined 'atypical depression' based on
+consensus-selected items of the IDS-SR (Inventory of Depressive
+Symptomatology Self-Report). To be classified as atypical, participants
+needed to report (1) a score of 0-2 for 'mood reactivity'; *and* (2) at
+least two of the following symptoms:
+
+1.  Leaden paralysis (a score of 2-3);
+2.  Weight gain *or* increased appetite (a score of 2-3);
+3.  Hypersomnia (a score of 2-3);
+4.  Interpersonal sensitivity (a score of 3).
+
+### Current medication use
+
+At enrolment and each 3-monthly assessment, participants were asked to
+list medication they were currently taking as part of the Client Service
+Receipt Inventory (CSRI).
+
+After correcting typographical errors, we categorised each medication
+based on expert opinion into three categories:
+
+1.  **Depression-related**
+    -   Antidepressants
+    -   Antipsychotics
+    -   Anticonvulsants
+2.  **Sleep-related**
+    -   Benzodiazepines
+    -   Hypnotics
+3.  **Other**
+
+These were entered into the models as three binary variables (0/1)
+indicating whether the participant was currently using each type of
+medication.
+
+### Alcohol use
+
+Alcohol use was measured using the total score on the Alcohol Use
+Disorders Identification Test (AUDIT).
+
+### Hours of daylight
+
+To account for seasonal differences in sleep and mood, we adjusted for the 
+mean hours of sunshine in the four weeks before each three-monthly outcome 
+assessment.
+
+Information from the World Meteorological Organization (WMO) was extracted from
+UNdata[^un] for three cities corresponding to the three RADAR-MDD sites:
+
+WMO city                                RADAR-MDD site
+--------------------------------------  --------------------
+De Bilt, Utrecht, The Netherlands.      Amsterdam
+London Gatwick, London, United Kingdom. King's College London
+Madrid, Spain                           CIBER Madrid
+
+WMO define hours of sunshine as the period during which direct solar irradiance
+exceeds 120 watts per square meter. This value is equivalent to the level of solar irradiance shortly after sunrise or shortly before sunset in cloud-free conditions.
+
+[^un]: <http://data.un.org/Data.aspx?d=CLINO&f=ElementCode%3a15>
+
+# Computing
+
+## Software
+
+All analyses were conducted in R 4.2.2. The main packages used were:
+
+-   [`brms`](https://CRAN.R-project.org/package=brms) 2.18;
+
+-   [`cmdstanr`](https://mc-stan.org/cmdstanr/) 0.5.3, using
+    [CmdStan](https://mc-stan.org/users/interfaces/cmdstan) 2.30.1;
+
+-   [`tidyverse`](https://CRAN.R-project.org/package=tidyverse) 2.0.0;
+
+-   [`marginaleffects`](https://CRAN.R-project.org/package=marginaleffects)
+    0.10.0.
+
+A full list of packages is provided in the `renv.lock` file.
+
+## Session information
+
+```{r}
+sessionInfo()
+```
+
+## Source code
+
+All code for this analysis can be found at
+<https://github.com/ewancarr/radar-sleep>.
+
+# Modelling
+
+## Standardisation and transformation of sleep features
+
+All sleep features were standardised (mean = 0; standard deviation = 1)
+prior to modelling. Three features that measured variance were
+additionally log-transformed to improve estimation and MCMC sampling:
+
+-   Total sleep time variance;
+
+-   Sleep onset latency variance; and
+
+-   Sleep midpoint variance.
+
+Three features were winsorised by setting extreme values to specified
+limits:
+
+-   Sleep midpoint (winsorised at midday);
+
+-   Social jet lag (winsorised at ±5 hours)
+
+## Prior distributions
+
+We used weakly informative priors for the regression coefficients,
+following McElreath @mcelreath2020, to constrain our estimates to
+plausible values.
+
+For example, for binary logistic regression models, we specified a prior
+of a $\text{Normal}(0, 1.5)$ for the regression coefficients (i.e.,
+normally distributed with a mean of 0 and standard deviation of 1.5),
+reflecting our expectation that extreme values were unlikely. For a one
+standard deviation difference in a given sleep feature, we do not think
+it is plausible to find an odds ratio of greater than 12 (i.e., a
+log-odds of 2.5) or less than 0.08 (a log-odds of -2.5).
+
+### Priors for binary logistic regression models
+
+```{r, cache.lazy = FALSE}
+#| echo: false
+load(here("models", "samples", "relmod_fit.Rdata"))
+
+print(prior_summary(fit_relmod[[1]], all = FALSE), show_df = FALSE)
+```
+
+### Priors for linear regression models
+
+```{r, cache.lazy = FALSE}
+#| echo: false
+load(here("models", "samples", "ids_fit.Rdata"))
+
+print(prior_summary(fit_ids[[1]], all = FALSE), show_df = FALSE)
+```
+
+# Posterior summaries
+
+```{r}
+#| echo: false
+# Select models to plot
+sel_ids <- fit_ids |> keep(str_detect(names(fit_ids), "^ids_total__.*__adj"))
+sel_relmod <- fit_relmod |> keep(str_detect(names(fit_relmod), "__adj$"))
+```
+
+## Depression relapse
+
+```{r}
+#| echo: false
+wrap_formula <- function(m) {
+  i <- str_detect(m, "^Formula")
+  m[i] <- str_wrap(m[i], 84)
+  return(m)
+}
+
+print_model <- function(fit, .label) {
+  cat(str_glue("\n### {.label} \n\n"))
+  
+  model_summary <- capture.output(summary(fit,
+                                  priors = TRUE,
+                                  prob = 0.89,
+                                  robust = TRUE)) |>
+    wrap_formula()
+  
+  cat("\n\`\`\`\n")
+  cat(model_summary, sep = "\n")
+  cat("\`\`\`\n")
+  
+  print(pp_check(fit, ndraws = 10) +
+          labs(title = "Posterior predictive check")
+  )
+  
+  picks <- str_subset(names(fit$fit),
+                      paste0("^z_1\\[|^r_pid\\[|b_z_age|b_maleTRUE|",
+                    "b_atypTRUE|b_z_audit|b_med.*|b_z_edyrs|",
+                    "b_partnerTRUE|b_z_sunshine|sigma|lprior|lp__|^Intercept$"),
+             negate = TRUE)
+  
+  print(mcmc_plot(fit,
+                  type = "trace",
+                  variable = picks) +
+          labs(title = "Trace plot"))
+  
+  print(mcmc_plot(fit, type = "hist") +
+          labs(title = "Posterior histograms")
+  )
+  
+  print(mcmc_plot(fit, type = "rhat") +
+    labs(title = "Rhat convergence diagnostic")
+  )
+  
+  cat("\n***\n")
+}
+```
+
+```{r posterior-relmod}
+#| echo: false
+#| output: asis
+#| eval: true
+for (i in seq_along(sel_relmod)) {
+  feat <- str_split(names(sel_relmod)[[i]], "__")[[1]][2]
+  lab <- labels[labels$x == feat,]$label_orig
+  print_model(sel_relmod[[i]], .label = lab)
+}
+```
+
+## Depression severity
+
+```{r posterior-ids}
+#| echo: false
+#| output: asis
+#| eval: true
+for (i in seq_along(sel_ids)) {
+  feat <- str_split(names(sel_ids)[[i]], "__")[[1]][2]
+  lab <- labels[labels$x == feat,]$label_orig
+  print_model(sel_ids[[i]], .label = lab)
+}
+```
