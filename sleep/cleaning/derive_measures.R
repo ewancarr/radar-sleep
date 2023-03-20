@@ -104,9 +104,9 @@ sel <- sel |>
          n_days = length(unique(merge_date))) |>
   ungroup()
 
-# Remove time periods with fewer than 5 days of data ---------------------------
+# Remove time periods with fewer than 8 days of data ---------------------------
 
-sel <- filter(sel, n_weekdays >= 5)
+sel <- filter(sel, n_weekdays >= 8)
 
 # Convert to data.table -------------------------------------------------------
 
