@@ -154,7 +154,7 @@ test_interaction <- function(.y, .x, .adj, .data, ...) {
 if (run_sensitivity) {
   int_ids <- pmap(opt_ids, ~ test_interaction(..1, ..2, ..3, d_ids))
   names(int_ids) <- make_names(opt_ids)
-  save(int_ids, file = dest("ids_int"))
+  saveRDS(int_ids, file = here("sleep", "models", "samples", "ids_int.rds"))
 }
 
 # END.

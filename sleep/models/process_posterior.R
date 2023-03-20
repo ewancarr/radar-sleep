@@ -5,13 +5,12 @@
 library(tidyverse)
 library(here)
 library(marginaleffects)
-source(here("sleep", "models", "init.R"))
-source(here("sleep", "cleaning", "extra", "labels.R"))
+source(here("models", "init.R"))
+source(here("cleaning", "extra", "labels.R"))
 
 # Average marginal effects ----------------------------------------------------
-
-load(here("sleep", "models", "samples", "relmod_ame.Rdata"), verbose = TRUE)
-load(here("sleep", "models", "samples", "ids_ame.Rdata"), verbose = TRUE)
+load(here("models", "samples", "relmod_ame.Rdata"), verbose = TRUE)
+load(here("models", "samples", "ids_ame.Rdata"), verbose = TRUE)
 
 ame_draws <- bind_rows(map_dfr(relmod_ame, as_tibble, .id = "model"),
                        map_dfr(ids_ame, ~ as_tibble(.x$ame), .id = "model")) |>
@@ -28,13 +27,13 @@ ame_nosleep <- filter(ame_draws, y %in% c("ids_total", "ids_nosleep"))
 ame_draws <- filter(ame_draws, y %in% c("rel_mod", "ids_total"))
 
 saveRDS(ame_draws,
-        file = here("sleep", "models", "processed", "ame_draws.rds"),
+        file = here("models", "processed", "ame_draws.rds"),
         compress = TRUE)
 
 # Adjusted predictions --------------------------------------------------------
 
-load(here("sleep", "models", "samples", "relmod_pre.Rdata"), verbose = TRUE)
-load(here("sleep", "models", "samples", "ids_pre.Rdata"), verbose = TRUE)
+load(here("models", "samples", "relmod_pre.Rdata"), verbose = TRUE)
+load(here("models", "samples", "ids_pre.Rdata"), verbose = TRUE)
 
 # Process posterior predictions for 'relmod'
 
@@ -65,7 +64,7 @@ ids_pre <- ids_pre[ids_pre$adj == "adj", ]
 rownames(ids_pre) <- NULL
 
 save(relmod_pre, ids_pre,
-     file = here("sleep", "models", "processed", "predictions.Rdata"))
+     file = here("models", "processed", "predictions.Rdata"))
 
 # Sensitivity analyses --------------------------------------------------------
 
@@ -91,5 +90,5 @@ saveRDS(comparison, file = here("sleep", "models", "processed",
 # 2. Remove sleep items from RDS
 
 saveRDS(ame_nosleep,
-        file = here("sleep", "models", "processed", "ame_nosleep.rds"),
+        file = here("models", "processed", "ame_nosleep.rds"),
         compress = TRUE)

@@ -13,7 +13,7 @@ library(marginaleffects)
 library(janitor)
 library(splines)
 library(data.table)
-source(here("sleep", "functions.R"), echo = TRUE)
+source(here("functions.R"), echo = TRUE)
 set_cmdstan_path("~/.cmdstan/cmdstan-2.30.1")
 
 # Set parameters
@@ -50,7 +50,7 @@ med_summary <- function(x) {
 
 # Load prepared data ----------------------------------------------------------
 
-merged <- readRDS(here("data", "clean", "merged.rds"))
+merged <- readRDS(here("..", "data", "clean", "merged.rds"))
 
 # Select required variables ---------------------------------------------------
 
@@ -75,6 +75,7 @@ covariates <- c("age", "male",
                 "med_depress", "med_other", "med_sleep",
                 "edyrs", "partner", 
                 "sunshine")
+
 outcomes <- c("rel", "rel_mod", "rel_5cat", 
               "ids_total", "lag_ids_total",
               "ids_nosleep", "lag_ids_nosleep")
@@ -152,4 +153,4 @@ zcov <- c("z_age", "male",
 # Save ------------------------------------------------------------------------
 
 save(dat, sleep_vars, trans, zcov, s1, s2,
-     file = here("data", "clean", "for_modelling.Rdata"))
+     file = here("..", "data", "clean", "for_modelling.Rdata"))
