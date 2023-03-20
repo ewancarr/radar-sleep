@@ -35,8 +35,8 @@ library(paletteer)
 library(patchwork)
 library(ggdist)
 load(here("data", "clean", "for_modelling.Rdata"))
-source(here("sleep", "cleaning", "extra", "labels.R"))
-source(here("sleep", "functions.R"))
+source(here("cleaning", "extra", "labels.R"))
+source(here("functions.R"))
 
 median_iqr <- function(x, dp = 1) {
     x <- x[!is.na(x)]
@@ -256,7 +256,7 @@ print_n(cc2)
 ### Compare excluded participants vs. included
 
 ```{r}
-source(here("sleep", "models", "init.R"))
+source(here("models", "init.R"))
 
 d_relapse <- right_join(dat, s1, by = c("pid", "t"))
 print_n(d_relapse)
@@ -296,7 +296,7 @@ tab_sup1 <- compare_excluded |>
 # Table caption
 # Supplementary Table 1: Comparing excluded vs. included individuals
 
-gtsave(tab_sup1, here("sleep", "writing", "tables", "tab_sup1.rtf"))
+gtsave(tab_sup1, here("writing", "tables", "tab_sup1.rtf"))
 tab_sup1
 ```
 
@@ -397,7 +397,7 @@ tab_1 <- bind_rows(top, bottom) |>
 # Table caption:
 # Table 1: Characteristics of analytical samples
 gtsave(tab_1,
-       here("sleep", "writing", "tables", "tab_1.html"))
+       here("writing", "tables", "tab_1.html"))
 
 tab_1
 ```
@@ -486,14 +486,14 @@ dist_trans <- map(spec,
 
 ```{r}
 ggsave(dist_orig,
-       file = here("sleep", "writing", "figures", "dist_orig.png"),
+       file = here("writing", "figures", "dist_orig.png"),
        dev = "png",
        width = 7,
        height = 9,
        dpi = 300)
 
 ggsave(dist_trans,
-       file = here("sleep", "writing", "figures", "dist_trans.png"),
+       file = here("writing", "figures", "dist_trans.png"),
        dev = "png",
        width = 7,
        height = 9,
@@ -519,7 +519,7 @@ The x-axis represents:
 #| fig-width: 9
 #| fig-height: 8
 
-ame_draws <- readRDS(here("sleep", "models", "processed", "ame_draws.rds"))
+ame_draws <- readRDS(here("models", "processed", "ame_draws.rds"))
 
 ame_draws <- ame_draws |>
   mutate(y_label = factor(case_when(y == "rel_mod" ~ "Relapse",
@@ -580,7 +580,7 @@ right_plot <- ame_draws |>
 ame_plot <- left_plot + right_plot + plot_layout(widths = c(1, 0.95))
 
 ggsave(ame_plot,
-       file = here("sleep", "writing", "figures", "ame_plot.png"),
+       file = here("writing", "figures", "ame_plot.png"),
        dev = "png",
        width = 10,
        height = 8,
@@ -693,14 +693,12 @@ The results are slightly attenuated, but conclusions unchanged.
 ```{r}
 #| tbl-cap: "Supplementary Table: Average Marginal Effects for IDS-SR without sleep items"
 
-ids_orig <- readRDS(here("sleep", "models",
-                          "processed", "ame_draws.rds")) |>
+ids_orig <- readRDS(here("models", "processed", "ame_draws.rds")) |>
   filter(y == "ids_total") |>
   mutate(gr = paste("Sleep\n", gr),
          y = "A")
 
-ids_nosleep <-  readRDS(here("sleep", "models", "processed",
-                                  "ame_nosleep.rds")) |>
+ids_nosleep <-  readRDS(here("models", "processed", "ame_nosleep.rds")) |>
   filter(y == "ids_nosleep") |>
   mutate(gr = paste("Sleep\n", gr),
          y = "B")

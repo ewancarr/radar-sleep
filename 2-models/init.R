@@ -50,7 +50,7 @@ med_summary <- function(x) {
 
 # Load prepared data ----------------------------------------------------------
 
-merged <- readRDS(here("..", "data", "clean", "merged.rds"))
+merged <- readRDS(here("data", "clean", "merged.rds"))
 
 # Select required variables ---------------------------------------------------
 
@@ -153,4 +153,4 @@ zcov <- c("z_age", "male",
 # Save ------------------------------------------------------------------------
 
 save(dat, sleep_vars, trans, zcov, s1, s2,
-     file = here("..", "data", "clean", "for_modelling.Rdata"))
+     file = here("data", "clean", "for_modelling.Rdata"))

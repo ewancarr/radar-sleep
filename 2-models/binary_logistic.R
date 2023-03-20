@@ -3,9 +3,9 @@
 # Started:      2022-02-25
 
 library(here)
-source(here("sleep", "models", "init.R"))
-source(here("sleep", "cleaning", "extra", "labels.R"))
-source(here("sleep", "functions.R"), echo = TRUE)
+source(here("models", "init.R"))
+source(here("cleaning", "extra", "labels.R"))
+source(here("functions.R"), echo = TRUE)
 
 extract_ame <- function(.model, .label) {
   params <- str_match(.label, "([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)")
@@ -64,18 +64,18 @@ names(fit_relmod) <- make_names(opt_relmod)
 # Extract average marginal effects --------------------------------------------
 
 relmod_ame <- imap(fit_relmod, extract_ame)
-save(relmod_ame, file = here("sleep", "models", "samples", "relmod_ame.Rdata"))
+save(relmod_ame, file = here("models", "samples", "relmod_ame.Rdata"))
 rm(ame_relmod)
 
 # Extract adjusted predictions ------------------------------------------------
 
 relmod_pre <- imap(fit_relmod, extract_adjusted_predictions)
-save(relmod_pre, file = here("sleep", "models", "samples", "relmod_pre.Rdata"))
+save(relmod_pre, file = here("models", "samples", "relmod_pre.Rdata"))
 rm(relmod_pre)
 
 # Save ------------------------------------------------------------------------
 
-save(fit_relmod, file = here("sleep", "models", "samples", "relmod_fit.Rdata"))
+save(fit_relmod, file = here("models", "samples", "relmod_fit.Rdata"))
 rm(fit_relmod)
 
 ###############################################################################

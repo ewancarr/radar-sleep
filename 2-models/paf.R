@@ -8,7 +8,7 @@ library(tidyverse)
 library(here)
 library(AF)
 library(lme4)
-source(here("sleep", "models", "init.R"))
+source(here("models", "init.R"))
 
 d <- filter(dat, pid %in% s1$pid) |> 
   as.data.frame()

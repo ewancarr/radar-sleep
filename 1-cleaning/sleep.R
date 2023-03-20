@@ -12,7 +12,7 @@ library(fs)
 library(data.table)
 library(dtplyr)
 library(dplyr, warn.conflicts = FALSE)
-source(here("sleep", "functions.R"))
+source(here("functions.R"))
 
 # Load 'sleep features' -------------------------------------------------------
 

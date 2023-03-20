@@ -8,8 +8,8 @@ library(patchwork)
 library(ggdist)
 subset <- FALSE
 load(here("data", "clean", "for_modelling.Rdata"), verbose = TRUE)
-source(here("sleep", "cleaning", "extra", "labels.R"))
-load(here("sleep", "models", "processed", "predictions.Rdata"), verbose = TRUE)
+source(here("cleaning", "extra", "labels.R"))
+load(here("models", "processed", "predictions.Rdata"), verbose = TRUE)
 
 lab_rel <- "Relapse\n\n(Predicted\nprobability)"
 lab_ids <- "IDS severity\n\n(Predicted\nscore)"
@@ -95,7 +95,6 @@ p_ids <- plot_data |>
 p_combined <- p_relapse / p_ids
 
 ggsave(p_combined,
-       filename = here("sleep", "writing", "figures", 
-                       str_glue("predictions.png")),
+       filename = here("writing", "figures", str_glue("predictions.png")),
        dpi = 300, dev = "png", width = 10, height = 8)
 

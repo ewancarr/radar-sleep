@@ -2,8 +2,8 @@
 # Author:       Ewan Carr
 # Started:      2022-06-14
 
-source(here::here("sleep", "models", "init.R"), echo = TRUE)
-source(here("sleep", "functions.R"), echo = TRUE)
+source(here::here("models", "init.R"), echo = TRUE)
+source(here("functions.R"), echo = TRUE)
 
 # Specify sample --------------------------------------------------------------
 
@@ -35,7 +35,7 @@ do_lm <- function(.y, .x, .adj, .data, ...) {
 
 fit_ids <- pmap(opt_ids, ~ do_lm(..1, ..2, ..3, d_ids))  
 names(fit_ids) <- make_names(opt_ids)
-save(fit_ids, file = here("sleep", "models", "samples", "ids_fit.Rdata"))
+save(fit_ids, file = here("models", "samples", "ids_fit.Rdata"))
 
 # Process posterior -----------------------------------------------------------
 
@@ -87,13 +87,13 @@ extract_adjusted_predictions <- function(.model,
 # Average marginal effects ----------------------------------------------------
 
 ids_ame <- imap(fit_ids, extract_ame, ameby = FALSE) 
-save(ids_ame, file = here("sleep", "models", "samples", "ids_ame.Rdata"))
+save(ids_ame, file = here("models", "samples", "ids_ame.Rdata"))
 rm(ids_ame)
 
 # Adjusted predictions --------------------------------------------------------
 
 ids_pre <- imap(fit_ids, extract_adjusted_predictions)
-save(ids_pre, file = here("sleep", "models", "samples", "ids_pre.Rdata"))
+save(ids_pre, file = here("models", "samples", "ids_pre.Rdata"))
 rm(ids_pre)
 
 ###############################################################################
@@ -149,7 +149,7 @@ test_interaction <- function(.y, .x, .adj, .data, ...) {
 if (run_sensitivity) {
   int_ids <- pmap(opt_ids, ~ test_interaction(..1, ..2, ..3, d_ids))
   names(int_ids) <- make_names(opt_ids)
-  saveRDS(int_ids, file = here("sleep", "models", "samples", "ids_int.rds"))
+  saveRDS(int_ids, file = here("models", "samples", "ids_int.rds"))
 }
 
 # END.

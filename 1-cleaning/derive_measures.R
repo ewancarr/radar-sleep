@@ -16,8 +16,8 @@ weekend <- c("Fri", "Sat")
 source(here("functions.R"))
 
 # Load prepared data
-sleep <- readRDS(here("..", "data", "clean", "sleep.rds"))
-survey <- readRDS(here("..", "data", "clean", "survey.rds"))
+sleep <- readRDS(here("data", "clean", "sleep.rds"))
+survey <- readRDS(here("data", "clean", "survey.rds"))
 
 # Merge 3-monthly survey data with sleep data ---------------------------------
 
@@ -475,4 +475,4 @@ merged$pid <- as.numeric(as.factor(merged$user_id))
 ####                                                                      #####
 ###############################################################################
 
-saveRDS(merged, file = here("..", "data", "clean", "merged.rds"))
+saveRDS(merged, file = here("data", "clean", "merged.rds"))
