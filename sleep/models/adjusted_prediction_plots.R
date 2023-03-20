@@ -65,7 +65,7 @@ p_relapse <- plot_data |>
          fill = "Credible\nintervals",
          x = "Standard deviations difference in sleep feature",
          y = str_wrap("Predicted probability of relapse", 10)) +
-    theme(text = element_text(family = "Arial"))
+    theme(text = element_text(family = "Times New Roman"))
 
 # Plot for IDS-SR -------------------------------------------------------------
 
@@ -88,7 +88,7 @@ p_ids <- plot_data |>
          fill = "Credible\nintervals",
          x = "Standard deviations difference in sleep feature",
          y = str_wrap("Predicted value of IDS-SR", 10)) +
-    theme(text = element_text(family = "Arial"))
+    theme(text = element_text(family = "Times New Roman"))
 
 # Combine and save ------------------------------------------------------------
 
@@ -98,3 +98,4 @@ ggsave(p_combined,
        filename = here("sleep", "writing", "figures", 
                        str_glue("predictions.png")),
        dpi = 300, dev = "png", width = 10, height = 8)
+
