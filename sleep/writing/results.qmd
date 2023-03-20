@@ -270,10 +270,16 @@ compare_excluded <- bind_rows(
           cc2 |> mutate(samp = "Sample 2")
 )
 
+fix_decimals <- function(tbl) {
+  tbl |>
+  text_transform(cells_body(),
+                 function(x) str_replace(x, "\\.", "·"))
+}
+
 tab_sup1 <- compare_excluded |>
   group_by(samp, pid) |>
   select(samp, age, ids_total, male, partner, edyrs, med_depress) |>
-  summarise(across(everything(), first)) |>
+  summarise(across(everything(), first), .groups = "drop") |>
   select(-pid) |>
   tbl_summary(by = samp,
               missing_text = "Missing",
@@ -282,9 +288,10 @@ tab_sup1 <- compare_excluded |>
                            male = "Male gender",
                            edyrs = "Years of education",
                            partner = "Lives with partner",
-                           med_depress = "Medication (Depression)")) |>
+                           med_depress = "Currently taking medication for depression")) |>
   as_gt() |>
-  opt_table_font(font = "Arial")
+  fix_decimals() |>
+  opt_table_font(font = "Times New Roman")
 
 # Table caption
 # Supplementary Table 1: Comparing excluded vs. included individuals
@@ -306,7 +313,7 @@ tab_sup1
     surveys.
   - Must have information on covariates.
 
-### Table 1
+### Table 2: Characteristics of the analytical samples
 
 ```{r}
 baseline <- dat |>
@@ -382,9 +389,10 @@ tab_1 <- bind_rows(top, bottom) |>
     tab_footnote(footnote = "Due to the definition of relapse, which excluded participants with chronic depression, participants in Sample 1 tended to report lower depression severity and lower use of antidepressant medication compared to Sample 2.",
                  locations = cells_body(rows = 11),
                  placement = "right") |>
-    tab_options(footnotes.marks = c("*", "†", "‡", "§")) |>
+    tab_options(footnotes.marks = c("*", "†", "‡", "§"),
+                table.font.size = 10) |>
     tab_style(style = cell_text(align = 'center'), locations = cells_column_labels()) |>
-  opt_table_font(font = "Arial")
+  opt_table_font(font = "Times New Roman")
 
 # Table caption:
 # Table 1: Characteristics of analytical samples
@@ -454,8 +462,10 @@ draw_distribution <- function(data, i, standardise = FALSE) {
                  labeller = labeller(label_f = label_wrap_gen(20))) +
       theme_ggdist() +
       theme(axis.title.x = element_blank(),
-            plot.title = element_text(size = 18, face = "bold")) +
-      labs(title = i$title)
+            text = element_text(family = "Times New Roman"),
+            plot.title = element_text(size = 14, face = "bold")) +
+      labs(title = i$title,
+           y = "Density")
   p <- p + plot_spacer() + plot_layout(ncol = 2, widths = c(i$w, 4 - i$w))
   return(p)
 }
@@ -474,27 +484,21 @@ dist_trans <- map(spec,
              heights = h)
 ```
 
-::: panel-tabset
-## Original scales
-
 ```{r}
-#| fig-dpi: 300
-#| fig-width: 9
-#| fig-height: 12
+ggsave(dist_orig,
+       file = here("sleep", "writing", "figures", "dist_orig.png"),
+       dev = "png",
+       width = 7,
+       height = 9,
+       dpi = 300)
 
-dist_orig
+ggsave(dist_trans,
+       file = here("sleep", "writing", "figures", "dist_trans.png"),
+       dev = "png",
+       width = 7,
+       height = 9,
+       dpi = 300)
 ```
-
-## Transformed
-
-```{r}
-#| fig-dpi: 300
-#| fig-width: 9
-#| fig-height: 12
-
-dist_trans
-```
-:::
 
 # Regression models
 
@@ -547,7 +551,7 @@ make_plot <- function(d) {
   theme_ggdist() + 
   scale_color_manual(values = c(pal[[2]], pal[[3]])) +
   theme(strip.text.y = element_text(angle = 0),
-        text = element_text(family = "Arial"),
+        text = element_text(family = "Times New Roman"),
         panel.border = element_rect(color = "gray90", fill = NA, size = 1),
         strip.background = element_rect(fill = "gray90"),
         strip.text.x = element_text(size = 11, face = "bold"),
@@ -569,7 +573,7 @@ right_plot <- ame_draws |>
   filter(term %in% trans,
          y == "ids_total") |>
   make_plot() +
-  labs(x = "IDS-SR score") +
+  labs(x = "Change in IDS-SR score") +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank())
 
@@ -607,40 +611,27 @@ tab_ame <- table_data |>
               values_from = cell) |>
   group_by(gr) |>
   gt() |>
-  tab_spanner(label = "Relapse", columns = starts_with("Relapse_")) |>
-  tab_spanner(label = "IDS-SR", columns = starts_with("IDS-SR_")) |>
+  fix_decimals() |>
+  tab_spanner(label = "Depression relapse", columns = starts_with("Relapse_")) |>
+  tab_spanner(label = "Depression severity (IDS-SR)", columns = starts_with("IDS-SR_")) |>
   cols_align(align = "center", columns = everything()) |>
   cols_align(align = "left", columns = label_orig) |>
   cols_label(label_orig = "",
-             Relapse_Unadjust. = "Unadj.",
-             Relapse_Adjusted = "Adj.",
-             `IDS-SR_Unadjust.` = "Unadj.",
-             `IDS-SR_Adjusted` = "Adj.") |>
+             Relapse_Unadjust. = "Unadjusted",
+             Relapse_Adjusted = "Adjusted",
+             `IDS-SR_Unadjust.` = "Unadjusted",
+             `IDS-SR_Adjusted` = "Adjusted") |>
   tab_style(style = list(cell_text(weight = "bold")),
             locations = list(cells_row_groups(),
                              cells_title(),
                              cells_column_spanners())) |>
-  opt_table_font(font = "Arial") |>
+  opt_table_font(font = "Times New Roman") |>
   fmt_markdown(columns = everything())
 
 tab_ame
 ```
 
 :::
-
-## Adjusted predictions
-
-These are attached to my email. (I haven't included these here, because they're
-too big). These figures show how the predicted value of each outcome
-(probability for relapse and deterioration; total score for IDS) change across
-the range of each sleep measure, from -2 SD to +2 SD.
-
-The idea would be to present (a) all of these in supplementary materials; (b) a
-smaller selection in the main text (e.g. a 2x2 grid to demonstrate typical
-results).
-
-# Adjusted predictions
-
 
 ## Sensitivity analysis
 
@@ -663,33 +654,36 @@ In the table, the `elpd_diff` column is the difference between the two models.
 * Values above zero indicate the interaction model is better.
 * Values below zero indicate the non-interaction model is better.
 
-But as above, none of these reach thresholds for sigificance.
+But as above, none of these reach thresholds for significance.
 
 ```{r}
-comparison <- readRDS(here("sleep", "models", "processed", "by_atypical.rds"))
+comparisons <- readRDS(here("models", "processed", "by_atypical.rds"))
+names(comparisons) <- c("model", "null", "elpd")
 
-comparison |>     
-  mutate(improvement = with_int > no_int, 
-         how_much = with_int - no_int) |>  
+comparisons |>
+  select(model, elpd) |>
   separate(model, c("y", "x", "adj"), "__") |>
   left_join(labels, by = "x") |>
-  filter(adj == "adj") |>
-  select(gr, label_orig, how_much) |>
-  mutate(how_much = sprintf("%.2f", how_much),
-         gr = paste("Sleep", gr)) |>
-  group_by(gr) |>
+  filter(adj == "adj",
+         y != "ids_nosleep") |>
+  select(gr, y, label_orig, elpd)  |>
+  mutate(how_much = sprintf("%.2f", elpd),
+         gr = paste("Sleep", gr),
+         y = if_else(y == "ids_total",
+                     "Depression severity (IDS-SR)",
+                     "Depression relapse")) |>
+  select(gr, y, label_orig, how_much) |>
+  pivot_wider(names_from = y,
+              values_from = how_much) |>
   gt() |>
-  cols_label(label_orig = "",
-             how_much = "Relapse") |>
+  cols_label(label_orig = "") |>
   cols_align(align = "right", columns = everything()) |>
   cols_align(align = "left", columns = label_orig) |>
   tab_style(style = list(cell_text(weight = "bold")),
             locations = list(cells_row_groups(),
                              cells_title(),
                              cells_column_spanners())) |>
-  opt_table_font(font = "Arial") |>
-  fmt_markdown(columns = everything())
-  
+  opt_table_font(font = "Times New Roman") 
 ```
 
 ### 2. Remove sleep items from IDS-SR
@@ -714,7 +708,7 @@ ids_nosleep <-  readRDS(here("sleep", "models", "processed",
 table_data <- bind_rows(ids_orig, ids_nosleep) |>
   group_by(gr, y, label_orig, adj) |>
   median_qi(estimate, .width = 0.89) |>
-  mutate(cell = str_glue("{sprintf('%.3f', estimate)} [{sprintf('%.3f', .lower)}, {sprintf('%.3f', .upper)}]"))
+  mutate(cell = str_glue("{sprintf('%.1f', estimate)} [{sprintf('%.1f', .lower)}, {sprintf('%.1f', .upper)}]"))
 
 table_data |>
   select(gr, label_orig, y, adj, cell) |>
@@ -727,69 +721,17 @@ table_data |>
   tab_spanner(label = md("**IDS-SR**<br>*Sleep items removed*"),
               columns = starts_with("B")) |>
   cols_label(label_orig = "",
-             `A_Unadjust.` = "Unadj.",
-             `A_Adjusted` = "Adj.",
-             `B_Unadjust.` = "Unadj.",
-             `B_Adjusted` = "Adj.") |>
+             `A_Unadjust.` = "Unadjusted",
+             `A_Adjusted` = "Adjusted",
+             `B_Unadjust.` = "Unadjusted",
+             `B_Adjusted` = "Adjusted") |>
   cols_align(align = "left", columns = label_orig) |>
   tab_style(style = list(cell_text(weight = "bold")),
             locations = list(cells_row_groups(),
                              cells_title())) |>
-  opt_table_font(font = "Arial")
+  opt_table_font(font = "Times New Roman") |>
+  fix_decimals()
 ```
-
-
-## Summary of key findings
-
-### 1. Variance is key.
-
-People with more variable sleep, or who saw an increase in sleep variability, were more likely to experience relapse, deterioration or an increase in IDS severity.
-
-### 2. In contrast, the amount of sleep seems less important.
-
-We found no evidence that total sleep time was associated with increased symptoms of depression.
-
-### 3. Higher sleep fragmentation and lower sleep efficiency were associated with increased symptoms or probability of relapse.
-
-This was in the expected direction, but not always consistent across outcomes.
-
-### 4. There was some inconsistency between outcomes, unexpected results, and uncertainty.
-
-This is not helped by very small numbers for the relapse outcome. Measurement error is also likely to play a role -- e.g., are we really capturing onset latency? For example, sleep onset latency was positively associated with IDS severity but negatively associated with relapse (although all results overlapping with 0).
-
-## Questions for discussion
-
--   Should we include all three outcomes?
-    -   Results for relapse and IDS severity were largely consistent, whereas deterioration often gave contradictory results.
-    -   Not a reason to exclude, but certainly complicates the picture.
--   I don't think we need all the 'onset latency' measures. We have:
-    -   Onset latency
-    -   Change in onset latency
-    -   Variance of onset latency
-    -   Change in variance of onset latency.
--   Are we happy with the list of covariates? Want to add anything?
-
-## Things that I still need to do
-
--   [ ] Remove sleep items from IDS score and re-run models.
--   [ ] Finalise list of covariates; re-run everything.
-
-# Appendix
-
-## What's the average marginal effect? {#whats-the-average-marginal-effect}
-
-Average marginal effects (AMEs) represent the change in the $Y$ per unit change/difference in $X$ averaged over the participants in our sample.
-
-1.  For each row/participant, calculated the 'fitted values' by plugging their values for each variable into the model equation.
-2.  Taking the average of the fitted values.
-
-This is shown below:
-
-![](figures/ame.png)
-
-This gives us a single number summary of the effect of $X$ on $Y$, accounting for any nonlinear terms, for the participants in our sample. This is in contrast to 'adjusted predictions', where we calculate the model predicted values at specified values of each covariate.
-
-See [this blog post](https://www.andrewheiss.com/blog/2022/05/20/marginalia/) for details.
 
 ## How do I interpret a credible interval?
 
