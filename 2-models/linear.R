@@ -2,7 +2,7 @@
 # Author:       Ewan Carr
 # Started:      2022-06-14
 
-source(here::here("models", "init.R"), echo = TRUE)
+source(here::here("2-models", "init.R"), echo = TRUE)
 source(here("functions.R"), echo = TRUE)
 
 # Specify sample --------------------------------------------------------------
@@ -14,87 +14,76 @@ d_ids <- bind_cols(d_ids, scale_variables(d_ids))
 
 opt_ids <- expand_grid(y = c("ids_total", "ids_nosleep"),
                        x = trans,
-                       adj = list("", zcov))
+                       adj = list("", zcov),
+                       cent = c("pm", "gm"),
+                       days = c("wd", "we"))
 
-# Fit models ------------------------------------------------------------------
+# Generate formula for each model ---------------------------------------------
 
-do_lm <- function(.y, .x, .adj, .data, ...) {
-  form <- as.formula(str_squish(str_glue("
-            {.y} ~ lag_{.y} + I(lag_{.y}^2) + {.x} + I({.x}^2) {cc(.adj)} + (1 | pid)
-            ")))
-  brm(form,
-      data = .data,
-      family = gaussian(),
-      prior = set_prior("normal(0, 2)", class = "b"),
-      stan_model_args = list(stanc_options = list("O1")),
-      threads = n_thread,
-      thin = 10,
-      iter = n_iter,
-      ...)
-}
-
-fit_ids <- pmap(opt_ids, ~ do_lm(..1, ..2, ..3, d_ids))  
-names(fit_ids) <- make_names(opt_ids)
-save(fit_ids, file = here("models", "samples", "ids_fit.Rdata"))
-
-# Process posterior -----------------------------------------------------------
-
-extract_ame <- function(.model, .label, ameby = FALSE) {
-  # Get x, y, covariates from model label
-  params <- str_match(.label,
-                      "([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)")
-  y <- params[, 2]
-  x <- params[, 3]
-  cov <- params[, 4]
-  # Get AVERAGE MARGINAL EFFECTS
-  ame <- marginaleffects(.model, variables = x) |> 
-    summary() |> 
-    posteriordraws() 
-  if (ameby) {
-    # Get AVERAGE MARGINAL EFFECTS, stratified by previous IDS score
-    ame_by <- marginaleffects(.model,
-                              variables = x,
-                              newdata = datagrid(lag_ids_total = seq(0, 74, 5),
-                                                 grid_type = "counterfactual")) |>
-      summary(by = "lag_ids_total")
-     ame_by <- as_tibble(ame_by)
-     ame_by$cov <- cov
-     ame_by$y <- y
-     return(list(ame = ame, ame_by = ame_by))
-  } else {
-    return(list(ame = ame))
+make_formula <- function(y, x, adj, cent, days) {
+  if(cent == "gm") {
+    xgm <- str_glue("{days}_{x}_gmz")
+    return(as.formula(str_squish(str_glue(
+      "{y} ~ lag_{y} + I(lag_{y}^2) +
+       {xgm} + I({xgm}^2) {cc(adj)} + (1 | pid)"))))
+  } else if (cent == "pm") {
+    xpm <- str_glue("{days}_{x}_pmz")
+    xm <- str_glue("{days}_{x}_mz")
+    return(as.formula(str_squish(str_glue(
+      "{y} ~ lag_{y} + I(lag_{y}^2) +
+       {xpm} + I({xpm}^2) +
+       {xm} + I({xm}^2)
+       {cc(adj)} + (1 | pid)"))))
   }
 }
 
-extract_adjusted_predictions <- function(.model,
-                                         .label,
-                                         cluster_var = "pid",
-                                         r = seq(-2, 2, 0.1)) {
-  # Get x, y, covariates from model label
-  params <- str_match(.label,
-                      "([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)")
-  y <- params[, 2]
-  x <- params[, 3]
-  cov <- params[, 4]
-  cat(".")
-  # Construct data frame for predictions 
-  nd <- construct_datagrid(.model, r, x)
-  # Extract predictions
-  predictions(.model, newdata = nd, re_formula = NA) |>
-    posteriordraws()
-}
+opt_ids$formula <- pmap(opt_ids, make_formula)
+
+# Fit each model --------------------------------------------------------------
+
+opt_ids$fit <- pmap(opt_ids, \(formula, ...) {
+                      brm(formula,
+                          data = d_ids,
+                          family = gaussian(),
+                          prior = set_prior("normal(0, 3)", class = "b"),
+                          stan_model_args = list(stanc_options = list("O1")),
+                          threads = params$n_thread,
+                          thin = params$n_thin,
+                          iter = params$n_iter)
+      })
 
 # Average marginal effects ----------------------------------------------------
 
-ids_ame <- imap(fit_ids, extract_ame, ameby = FALSE) 
-save(ids_ame, file = here("models", "samples", "ids_ame.Rdata"))
-rm(ids_ame)
+get_draws <- function(f, x) {
+  avg_slopes(f, variables = x) |>
+    posterior_draws() |>
+    pluck("draw")
+}
+
+opt_ids$ame <- pmap(opt_ids, function(y, x, adj, cent, days, fit, ...) {
+   terms <- list(within = str_glue("{days}_{x}_pmz"),
+                 between = str_glue("{days}_{x}_mz"),
+                 total = str_glue("{days}_{x}_gmz"))
+       if (cent == "pm") {
+         return(list(within = get_draws(fit, terms$within),
+                     between = get_draws(fit, terms$between)))
+       } else if (cent == "gm") {
+         return(list(total = get_draws(fit, terms$total)))
+       }
+})
 
 # Adjusted predictions --------------------------------------------------------
 
-ids_pre <- imap(fit_ids, extract_adjusted_predictions)
-save(ids_pre, file = here("models", "samples", "ids_pre.Rdata"))
-rm(ids_pre)
+opt_ids$pred <-
+  select(opt_ids, fit, y, x, adj, cent, days) |>
+  pmap(extract_adjusted_predictions)
+
+# Save main models ------------------------------------------------------------
+
+saveRDS(opt_ids,
+        file = here("2-models", "samples",
+                    str_glue("{ds()}_ids.rds")))
+opt_ids <- select(opt_ids, -fit, -ame, -pred)
 
 ###############################################################################
 ####                                                                      #####
@@ -102,54 +91,69 @@ rm(ids_pre)
 ####                                                                      #####
 ###############################################################################
 
-fit_interaction <- function(.y, .x, .adj, .data,
-                            include_interaction = FALSE,
-                            modifier = "atyp",
-                            ...) {
-  if (include_interaction) {
-    form <- as.formula(str_squish(str_glue(
-              "{.y} ~ lag_{.y} + 
-                      I(lag_{.y}^2) +
-                      {.x} + I({.x}^2) +
-                      {modifier} +
-                      {.x}:{modifier} + I({.x}^2):{modifier}
-                      {cc(.adj)} + (1 | pid)"
-    )))
+formula_with_interaction <- function(y, x, adj, days,
+                                     interact = TRUE,
+                                     modifier = "atyp") {
+  # NOTE: We're using person-mean centered features only here (*_pmz)
+  xpm <- str_glue("{days}_{x}_pmz")
+  xm <- str_glue("{days}_{x}_mz")
+  if (interact) {
+    # Model WITH interaction term
+    return(as.formula(str_squish(str_glue(
+      "{y} ~ lag_{y} +
+             I(lag_{y}^2) +
+             {xpm} + I({xpm}^2) +
+             {xm} + I({xm}^2) +
+             {modifier} +
+             {xpm}:{modifier} + I({xpm}^2):{modifier}
+             {cc(adj)} + (1 | pid)"))))
   } else {
-    form <- as.formula(str_squish(str_glue(
-              "{.y} ~ lag_{.y} + 
-                      I(lag_{.y}^2) +
-                      {.x} + I({.x}^2) +
-                      {modifier}
-                      {cc(.adj)} + (1 | pid)"
-              )))
+    # Model WITHOUT interaction term
+    return(as.formula(str_squish(str_glue(
+      "{y} ~ lag_{y} +
+             I(lag_{y}^2) +
+             {xpm} + I({xpm}^2) +
+             {xm} + I({xm}^2) +
+             {modifier}
+             {cc(adj)} + (1 | pid)"))))
   }
-  fit <- brm(form,
-             data = .data,
-             family = gaussian(),
-             prior = set_prior("normal(0, 2)", class = "b"),
-             control = list(adapt_delta = 0.999,
-                            step_size = 0.01,
-                     max_treedepth = 15),
-             stan_model_args = list(stanc_options = list("O1")),
-             threads = n_thread,
-             iter = n_iter,
-             ...) |>
-          add_criterion("loo")
-  return(fit)
 }
 
-test_interaction <- function(.y, .x, .adj, .data, ...) {
+test_interaction <- function(y, x, adj, days, data, ...) {
+  # Specify formula with and without interaction term
+  f_with <- formula_with_interaction(y, x, adj, days, interact = TRUE)
+  f_wo <- formula_with_interaction(y, x, adj, days, interact = FALSE)
   # Fit models
-  m_wo <- fit_interaction(.y, .x, .adj, .data)
-  m_with <- fit_interaction(.y, .x, .adj, .data, modifier = "atyp")
+  m_with  <- brm(f_with,
+                 data = data,
+                 family = gaussian(),
+                 prior = set_prior("normal(0, 3)", class = "b"),
+                 stan_model_args = list(stanc_options = list("O1")),
+                 ...) |>
+                   add_criterion("kfold")
+  m_wo <- brm(f_wo,
+              data = data,
+              family = gaussian(),
+              prior = set_prior("normal(0, 3)", class = "b"),
+              stan_model_args = list(stanc_options = list("O1")),
+              ...) |>
+                add_criterion("kfold")
   return(list(wo = m_wo, wi = m_with))
 }
 
-if (run_sensitivity) {
-  int_ids <- pmap(opt_ids, ~ test_interaction(..1, ..2, ..3, d_ids))
-  names(int_ids) <- make_names(opt_ids)
-  saveRDS(int_ids, file = here("models", "samples", "ids_int.rds"))
+if (params$run_sensitivity) {
+  opt_ids$int <- pmap(opt_ids,
+                      \(y, x, adj, days, ...) {
+                        print(c(y, x, length(adj), days))
+                        test_interaction(y, x, adj, days,
+                                         data = d_ids,
+                                         iter = 10000,
+                                         thin = 5,
+                                         threads = params$n_thread)
+                      })
+  saveRDS(opt_ids,
+          file = here("2-models", "samples", "final",
+                      str_glue("{ds()}_ids_int.rds")))
 }
 
 # END.

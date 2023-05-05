@@ -3,20 +3,12 @@
 # Started:      2022-02-25
 
 library(here)
-source(here("models", "init.R"))
-source(here("cleaning", "extra", "labels.R"))
+library(data.table)
+library(furrr)
+plan(multisession, workers = 20)
+source(here("2-models", "init.R"))
+source(here("1-cleaning", "extra", "labels.R"))
 source(here("functions.R"), echo = TRUE)
-
-extract_ame <- function(.model, .label) {
-  params <- str_match(.label, "([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)")
-  y <- params[, 2]
-  trans <- params[, 3]
-  cov <- params[, 4]
-  marginaleffects(.model, variables = trans) |>
-    summary() |>
-    posteriordraws() |>
-    filter(term == trans)
-}
 
 ###############################################################################
 ####                                                                      #####
@@ -31,19 +23,35 @@ d_relapse <- bind_cols(d_relapse, scale_variables(d_relapse))
 
 # Specify models --------------------------------------------------------------
 
-construct_formula <- function(.y, .x, .adj) {
-  return(as.formula(str_glue("{.y} ~ {.x} + I({.x}^2) {cc(.adj)} + (1 | pid)")))
-}
-
 opt_relmod <- expand_grid(y = "rel_mod",
                           x = trans,
-                          adj = list("", zcov))
+                          adj = list("", zcov),
+                          cent = c("pm", "gm"),
+                          days = c("wd", "we"))
+
+
+construct_formula <- function(.y, .x, .adj, .cent, .days) {
+  if (.cent == "gm") {
+    # To estimate the total effect, use grand-mean centring
+    xgm <- str_glue("{.days}_{.x}_gmz")
+    return(as.formula(str_glue(
+      "{.y} ~ {xgm} + I({xgm}^2) {cc(.adj)} + (1 | pid)"
+      )))
+  } else if (.cent == "pm") {
+    # To estimate within- and between-person effects, use person-mean centring
+    xpm <- str_glue("{.days}_{.x}_pmz")
+    xm <- str_glue("{.days}_{.x}_mz")
+    return(as.formula(str_glue(
+      "{.y} ~ {xpm} + I({xpm}^2) + {xm} + I({xm}^2) {cc(.adj)} + (1 | pid)"
+      )))
+  }
+}
 
 # Fit models ------------------------------------------------------------------
 
-do_lr <- function(.y, .x, .adj, .data, ...) {
-  brm(construct_formula(.y, .x, .adj),
-      data = .data,
+do_lr <- function(y, x, adj, cent, days, data, ...) {
+  brm(construct_formula(y, x, adj, cent, days),
+      data = data,
       family = bernoulli(),
       prior = set_prior("normal(0, 1.5)", class = "b"),
       stan_model_args = list(stanc_options = list("O1")),
@@ -53,30 +61,46 @@ do_lr <- function(.y, .x, .adj, .data, ...) {
       ...)
 }
 
-fit_relmod <- pmap(opt_relmod,
-                   ~ do_lr(..1, ..2, ..3, 
-                           d_relapse,
-                           iter = n_iter,
-                           thin = 10,
-                           threads = n_thread))  
-names(fit_relmod) <- make_names(opt_relmod)
+opt_relmod$fit <- 
+  pmap(opt_relmod, \(y, x, adj, cent, days, ...) {
+         do_lr(y, x, adj, cent, days, data = d_relapse,
+               iter = params$n_iter,
+               thin = params$n_thin,
+               threads = params$n_thread)
+      })
 
-# Extract average marginal effects --------------------------------------------
+# Extract average marginal effect (AME) posteriors ----------------------------
 
-relmod_ame <- imap(fit_relmod, extract_ame)
-save(relmod_ame, file = here("models", "samples", "relmod_ame.Rdata"))
-rm(ame_relmod)
+get_draws <- function(f, x) {
+  avg_slopes(f, variable = x) |>
+    posterior_draws() |>
+    pluck("draw") 
+}
+
+opt_relmod$ame <- pmap(opt_relmod, function(y, x, adj, cent, days, fit) {
+   terms <- list(within = str_glue("{days}_{x}_pmz"),
+                 between = str_glue("{days}_{x}_mz"),
+                 total = str_glue("{days}_{x}_gmz"))
+       if (cent == "pm") {
+         return(list(within = get_draws(fit, terms$within),
+                     between = get_draws(fit, terms$between)))
+       } else if (cent == "gm") {
+         return(list(total = get_draws(fit, terms$total)))
+       }
+})
 
 # Extract adjusted predictions ------------------------------------------------
 
-relmod_pre <- imap(fit_relmod, extract_adjusted_predictions)
-save(relmod_pre, file = here("models", "samples", "relmod_pre.Rdata"))
-rm(relmod_pre)
+opt_relmod$pred <- 
+  select(opt_relmod, fit, y, x, adj, cent, days) |>
+  pmap(extract_adjusted_predictions)
 
-# Save ------------------------------------------------------------------------
+# Save main models ------------------------------------------------------------
 
-save(fit_relmod, file = here("models", "samples", "relmod_fit.Rdata"))
-rm(fit_relmod)
+saveRDS(opt_relmod, 
+        file = here("2-models", "samples", "final", 
+                    str_glue("{ds()}_relmod_.rds")))
+opt_relmod <- select(opt_relmod, -fit, -ame, -pred)
 
 ###############################################################################
 ####                                                                      #####
@@ -84,49 +108,69 @@ rm(fit_relmod)
 ####                                                                      #####
 ###############################################################################
 
-formula_with_interaction <- function(.y, .x, .adj,
+formula_with_interaction <- function(y, x, adj, days,
                                      interact = TRUE,
                                      modifier = "atyp") {
+  # NOTE: We're using person-mean centered features only here (*_pmz)
+  xpm <- str_glue("{days}_{x}_pmz")
+  xm <- str_glue("{days}_{x}_mz")
   if (interact) {
-    return(as.formula(str_glue("{.y} ~ {.x} + I({.x}^2) + {modifier} + {.x}:{modifier} + I({.x}^2):{modifier}{cc(.adj)} + (1 | pid)")))
+    # Model WITH interaction term
+    return(as.formula(str_squish(str_glue(
+      "{y} ~ {xpm} + I({xpm}^2) + 
+             {xm} + I({xm}^2) +
+             {modifier} + {xpm}:{modifier} +
+             I({xpm}^2):{modifier}
+             {cc(adj)} + (1 | pid)"))))
   } else {
-    return(as.formula(str_glue("{.y} ~ {.x} + I({.x}^2) + {modifier}{cc(.adj)} + (1 | pid)")))
+    # Model WITHOUT interaction term
+    return(as.formula(str_squish(str_glue(
+      "{y} ~ {xpm} + I({xpm}^2) + 
+             {xm} + I({xm}^2)
+             {cc(adj)} + (1 | pid)"))))
   }
 }
 
-test_interaction <- function(.y, .x, .adj, .data, ...) {
+test_interaction <- function(y, x, adj, days, data, ...) {
   # Specify formula with and without interaction term
-  f_with <- formula_with_interaction(.y, .x, .adj, TRUE, "atyp")
-  f_wo <- formula_with_interaction(.y, .x, .adj, FALSE, "atyp")
+  f_with <- formula_with_interaction(y, x, adj, days, interact = TRUE)
+  f_wo <- formula_with_interaction(y, x, adj, days, interact = FALSE)
   # Fit models
   m_with <- brm(f_with, 
-                data = .data,
+                data = data,
                 family = bernoulli(),
                 prior = set_prior("normal(0, 1.5)", class = "b"),
                 stan_model_args = list(stanc_options = list("O1")),
                 control = list(adapt_delta = 0.999,
                                step_size = 0.01,
                                max_treedepth = 15),
-                ...)
+                ...) |>
+    add_criterion("kfold")
   m_wo <- brm(f_with, 
-              data = .data,
+              data = data,
               family = bernoulli(),
               prior = set_prior("normal(0, 1.5)", class = "b"),
               stan_model_args = list(stanc_options = list("O1")),
               control = list(adapt_delta = 0.999,
                              step_size = 0.01,
                              max_treedepth = 15),
-              ...)
+              ...) |>
+    add_criterion("kfold")
   return(list(wo = m_wo, wi = m_with))
 }
 
-if (run_sensitivity) {
-  int_relmod <- pmap(opt_relmod, ~ test_interaction(..1, ..2, ..3,
-                                                    d_relapse,
-                                                    iter = n_iter,
-                                                    threads = n_thread))
-  names(int_relmod) <- make_names(opt_relmod)
-  save(int_relmod, file = dest("relmod_int"))
+if (params$run_sensitivity) {
+  opt_relmod$int <- pmap(opt_relmod, 
+                         \(y, x, adj, days, ...) {
+                           test_interaction(y, x, adj, days,
+                                            data = d_relapse,
+                                            iter = 10000,
+                                            thin = 5,
+                                            threads = params$n_thread)
+                         })
+  saveRDS(opt_relmod,
+          file = here("2-models", "samples", "final", 
+                      str_glue("{ds()}_relmod_int.rds")))
 }
 
 # END.
