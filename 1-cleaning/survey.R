@@ -2,16 +2,19 @@
 # Author:       Ewan Carr
 # Started:      2022-02-07
 
+library(conflicted)
 library(tidyverse)
 library(here)
-library(lubridate)
 library(haven)
 library(janitor)
 library(naniar)
 library(fs)
 library(data.table)
 library(dtplyr)
-source(here("sleep", "functions.R"))
+conflicts_prefer(dplyr::filter,
+                 dplyr::lag,
+                 lubridate::month)
+source(here("functions.R"))
 
 ###############################################################################
 ####                                                                      #####
@@ -21,7 +24,7 @@ source(here("sleep", "functions.R"))
 
 # Load survey data ------------------------------------------------------------
 
-survey <- read_dta(here("data", "raw", "totaldataset.dta")) |>
+survey <- read_dta(here("a-data", "raw", "totaldataset.dta")) |>
   rename(user_id = subject_id,
          event = redcap_event_name,
          ids_date = IDSdate) |>
@@ -95,7 +98,7 @@ survey <- ids_items |>
 
 # Get outcomes from REDCAP.dta ------------------------------------------------
 
-redcap <- read_dta(here("data", "raw", "REDCAP data.dta")) |>
+redcap <- read_dta(here("a-data", "raw", "REDCAP data.dta")) |>
   mutate(t = case_when(str_detect(redcap_event_name, "enrolment_arm_1") ~ 0,
                        TRUE ~ parse_number(redcap_event_name))) |>
   rename(user_id = subject_id)
@@ -169,12 +172,75 @@ full_join(a, b) |>
   filter(t > 0) |>
   arrange(user_id, t) |>
   count(is.na(from_a) | is.na(from_b))
-# TODO: query.
 
 survey <- survey |>
   full_join(outcomes, by = c("user_id", "t"))
 
 print(length(unique(survey$user_id)))
+
+# Derive modified relapse outcome ---------------------------------------------
+
+survey$rel <- as.logical(survey$rel)
+survey$rel_mod <-
+  with(survey, 
+     case_when(rel & ids_total > 25 ~ 1,     # Meets relapse, current IDS > 25
+               rel & ids_total <= 25 ~ -99,  # Meets relapse, current IDS ≤ 25
+               !rel & ids_total <= 25 ~ 0,   # No relapse, current IDS ≤ 25
+               !rel & ids_total > 25 ~ NA))  # No relapse, current IDS > 25
+
+# 1. The original definition as per Matcham et al. (2019):
+# 
+#   The presence of MDD during follow-up will be defined as meeting criteria
+#   for MDD according to the Wold Health Organisation’s Composite International
+#   Diagnostic Interview - Short Form (CIDI-SF; [44]). [...] Additionally, a
+#   score of > 25 on the the Inventory of Depressive Symptomatology –
+#   Self-Reported (IDS-SR; [45]) will be required to establish that the
+#   severity of the depressive episode is at least moderate.
+#
+# 2. A modified definition, that requires participants in remission to also
+#    have an IDS score of <= 25. 
+# 
+# ════════ ══════════════════════════════ ═════════════════════════════════════
+#          Original definition             Modified definition                 
+# ════════ ══════════════════════════════ ═════════════════════════════════════
+#  y = 1   Meeting criteria for CIDI-SF    The same.                           
+#          AND scoring > 25 on IDS SR                                          
+# ════════ ══════════════════════════════ ═════════════════════════════════════
+#  y = 0   Not meeting criteria for        Not meeting criteria for relapse    
+#          relapse (i.e. everyone else).   AND scoring ≤ 25 on IDS-SR          
+# ════════ ══════════════════════════════ ═════════════════════════════════════
+#  y = NA  None.                           Not meeting criteria for relapse AND
+#                                           scoring > 25 on IDS-SR             
+# ════════ ══════════════════════════════ ═════════════════════════════════════
+
+# Depression subtypes ---------------------------------------------------------
+
+# NOTE: if subtype is missing, use PREVIOUS non-missing value for participant
+
+survey <- survey |>
+  arrange(user_id, t) |>
+  group_by(user_id, t) |>
+  fill(atypical_depression, .direction = "up") |>
+  rename(atyp = atypical_depression)
+
+# Derive lagged IDS outcomes --------------------------------------------------
+
+survey$orig <- TRUE
+ids <- survey |>
+  group_by(user_id) |>
+  expand(t = seq(3, 24, 3)) |>
+  full_join(select(survey, user_id, t, ids_total, ids_nosleep, orig),
+            by = c("user_id", "t")) |>
+  arrange(user_id, t)
+
+ids <- ids |>
+  mutate(across(c(ids_total, ids_nosleep),
+                lag, .names = "lag_{.col}")) |>
+  filter(orig) |>
+  select(user_id, t, starts_with("lag_"))
+
+survey <- inner_join(survey, ids, by = c("user_id", "t")) |>
+  select(-orig)
 
 ###############################################################################
 ####                                                                      #####
@@ -195,13 +261,13 @@ meds <- redcap |>
   select(user_id, t, med_no, value)
 
 # Load lookup table 
-med_lookup <- read_csv(here("data", "raw",
+med_lookup <- read_csv(here("a-data", "raw",
                             "medications", "medkey_complete.csv")) |>
-  distinct(original, correct) |>
+  distinct(original, correct, class) |>
   mutate(across(everything(), str_to_lower))
 
 # Load Matthew's categories
-cat_matthew <- read_csv(here("data", "raw", "medications",
+cat_matthew <- read_csv(here("a-data", "raw", "medications",
                              "Medication Types_MH.csv"),
                         col_types = "c_c",
                         col_names = c("medication_name", "cat_matthew"),
@@ -209,7 +275,7 @@ cat_matthew <- read_csv(here("data", "raw", "medications",
   mutate(across(everything(), str_to_lower))
 
 # Load additional lookup table
-other_lookup <- read_csv(here("data", "raw", "medications",
+other_lookup <- read_csv(here("a-data", "raw", "medications",
                              "other_medications.csv"),
                          col_types = "cc")
 
@@ -229,16 +295,15 @@ table(not_found)
 unique(paste(na.omit(meds$value[not_found])))
   
 meds <- meds |>
-  left_join(med_lookup, by = c("value" = "original")) |>
+  left_join(med_lookup, by = c("value" = "original"), multiple = "all") |>
   left_join(cat_matthew, by = c("correct" = "medication_name")) |>
-  select(user_id, t, med_no, value, correct,
+  select(user_id, t, med_no, value, correct, class,
          medication_category = cat_matthew) |>
   distinct(user_id, t, med_no, value, .keep_all = TRUE)
 
 # Create simplified measures --------------------------------------------------
 
 meds <- meds |>
-  group_by(user_id, t) |>
   summarise(
     med_depress = any(medication_category %in% c("antidepressant",
                                                  "antipsychotic",
@@ -249,17 +314,18 @@ meds <- meds |>
                                                "hypnotic"),
                     na.rm = TRUE),
     med_other = any((!is.na(medication_category)) & 
-                     (!(med_depress | med_sleep)))) |>
-  ungroup()
+                     (!(med_depress | med_sleep))),
+            .by = c(user_id, t))
 
-
-survey <- left_join(survey, meds, by = c("t", "user_id")) |>
+survey <- left_join(survey, meds,
+                    by = c("t", "user_id")) |>
   ungroup() |>
-  mutate(across(c(med_depress, med_sleep, med_other), replace_na, FALSE))
+  mutate(across(c(med_depress, med_sleep, med_other),
+                \(x) replace_na(x, FALSE)))
 
-## Import missing 'ids_date' dates (from Faith via email) ---------------------
+# Import missing 'ids_date' dates (from Faith via email) ----------------------
 
-fixed_dates <- read_csv(here("data", "raw", "fixed_dates.csv")) |>
+fixed_dates <- read_csv(here("a-data", "raw", "fixed_dates.csv")) |>
   rename(user_id = subject_id) |>
   gather(t, ids_date, -user_id) |>
   filter(ids_date != 0) |>
@@ -277,7 +343,7 @@ table(is.na(survey$ids_date))
 # Source
 # http://data.un.org/Data.aspx?d=CLINO&f=ElementCode:15&c=2,5,6,7,10,15,18,19,20,22,24,26,28,30,32,34,36,38,40,42,44,46&s=CountryName:asc,WmoStationNumber:asc,StatisticCode:asc&v=1
 
-sunshine <- read_csv(here("data", "raw", "sunshine", "UNdata.csv")) |>
+sunshine <- read_csv(here("a-data", "raw", "sunshine", "UNdata.csv")) |>
   clean_names() |>
   filter(station_name %in% c("MADRID", "London-Gatwick", "DE BILT")) |>
   select(station_name,
@@ -285,16 +351,18 @@ sunshine <- read_csv(here("data", "raw", "sunshine", "UNdata.csv")) |>
   mutate(site = case_when(station_name == "DE BILT" ~ "AMSTERDAM",
                           station_name == "London-Gatwick" ~ "KCL",
                           station_name == "MADRID" ~ "CIBER")) |>
-  pivot_longer(jan:dec, names_to = "month", values_to = "sunshine") 
+  pivot_longer(jan:dec,
+               names_to = "month",
+               values_to = "sunshine") 
 
 # Get hours of sunshine 4 weeks ago, for each survey
 
 survey <- survey |>
-  mutate(month = str_to_lower(lubridate::month(ids_date - weeks(4),
-                                               label = TRUE,
-                                               abbr = TRUE))) |>
+  mutate(month = str_to_lower(month(ids_date - weeks(4),
+                                    label = TRUE,
+                                    abbr = TRUE))) |>
   left_join(sunshine, by = c("site", "month"))
 
 # Save ------------------------------------------------------------------------
 
-saveRDS(survey, file = here("data", "clean", "survey.rds"))
+saveRDS(survey, file = here("a-data", "clean", "survey.rds"))
