@@ -12,13 +12,14 @@ library(fs)
 library(data.table)
 library(dtplyr)
 library(dplyr, warn.conflicts = FALSE)
+library(conflicted)
 source(here("functions.R"))
 
 # Load 'sleep features' -------------------------------------------------------
 
 # These are the daily sleep features from WP8 / Dan.
 
-p <- here("data", "raw", "radarV1_MDD", "csv_files")
+p <- here("a-data", "raw", "radarV1_MDD", "csv_files")
 sleep <- read_csv(paste0(p, "/dailyFeatures_fitbit_sleep.csv"))
 te <- read_csv(paste0(p, "/timeIntervals.csv"))
 sleep <- left_join(sleep, te,
@@ -67,7 +68,7 @@ days <- sleep |>
          sleep_day) |>
   distinct()
 
-save(days, file = here("data", "clean", "days_lookup.Rdata"))
+save(days, file = here("a-data", "clean", "days_lookup.Rdata"))
 
 
 ###############################################################################
@@ -79,7 +80,7 @@ save(days, file = here("data", "clean", "days_lookup.Rdata"))
 # Load FitBit steps data ------------------------------------------------------
 
 # Load pre-processed step data
-load(here("data", "clean", "step_data.Rdata"), verbose = TRUE)
+load(here("a-data", "clean", "step_data.Rdata"), verbose = TRUE)
 
 # NOTE: It's important to get the time zones right here. Specifically, we need:
 #      
@@ -114,7 +115,10 @@ sleep_onset <- select(sleep,
                       user_id, site, sleep_day, start_sleep, start_sleep_tz)
 
 # Merge step data with sleep onset
-ss <- inner_join(steps, sleep_onset, by = c("site", "user_id", "sleep_day")) 
+ss <- inner_join(steps,
+                 sleep_onset,
+                 by = c("site", "user_id", "sleep_day"),
+                 multiple = "all") 
 
 # Identify last step before sleep onset ---------------------------------------
 
@@ -141,6 +145,10 @@ sleep <- sleep |>
   left_join(select(sol, user_id, sleep_day, sol),
              by = c("user_id", "merge_date" = "sleep_day"))
 
+# Identify weekdays vs. weekends ----------------------------------------------
+
+sleep$weekend <- wday(sleep$sleep_day, label = TRUE) %in% c("Fri", "Sat")
+
 # Save ------------------------------------------------------------------------
 
-saveRDS(sleep, file = here("data", "clean", "sleep.rds"))
+saveRDS(sleep, file = here("a-data", "clean", "sleep.rds"))
