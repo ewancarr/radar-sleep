@@ -14,7 +14,7 @@ library(janitor)
 library(splines)
 library(data.table)
 source(here("functions.R"), echo = TRUE)
-set_cmdstan_path("~/.cmdstan/cmdstan-2.30.1")
+set_cmdstan_path("~/.cmdstan/cmdstan-2.32.0")
 
 # Set parameters
 verbose <- FALSE
