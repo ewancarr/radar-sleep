@@ -33,20 +33,24 @@ derive_midpoint <- function(start, stop) {
   return(hour(midpoint) + (minute(midpoint) / 60))
 }
 
-construct_datagrid <- function(.model, r, x) {
+calculate_median <- function(x) {
+  if (is.logical(x)) {
+    return(as.logical(median(x, na.rm = TRUE))) 
+  } else if (is.numeric(x) ) {
+    return(median(x, na.rm = TRUE))
+  } else {
+    stop("Must be logical or numeric")
+  }
+}
+
+construct_datagrid <- function(fit, y, x, r) {
   # Construct a data frame over which to compute the predictions.
   # Calculates the median of each variable.
-  nd <- insight::get_data(.model)
-  nd <- nd[, !(names(nd) %in% c(x, "pid")), drop = FALSE]
-  nd <- setDT(nd)[, lapply(.SD, median, na.rm = TRUE), ][rep(1:.N, length(r))]
+  nd <- insight::get_data(fit)
+  nd <- select(nd, -pid, -all_of(c({{x}}, {{y}})))
+  nd <- summarise(nd, across(everything(), calculate_median)) 
+  nd <- uncount(nd, length(r))
   nd[[x]] <- r
-  nd <- as.data.frame(nd)
-  for (v in c("male", "partner", "med_other", 
-              "med_sleep", "med_depress", "atyp")) {
-    if (v %in% names(nd)) {
-      nd[[v]] <- as.logical(nd[[v]])
-    }
-  }
   return(nd)
 }
 
@@ -54,29 +58,62 @@ make_names <- function(model_list) {
   pmap_chr(model_list, ~ str_glue("{..1}__{..2}__{ifelse(length(..3) > 1, 'adj', 'unadj')}"))
 }
 
-extract_adjusted_predictions <- function(.model,
-                                         .label,
-                                         cluster_var = "pid",
-                                         r = seq(-2, 2, 0.1)) {
-  # Get x, y, covariates from model label
-  params <- str_match(.label,
-                      "([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)__([0-9a-zA-Z_]+)")
-  y <- params[, 2]
-  x <- params[, 3]
-  cov <- params[, 4]
-  cat(".")
+extract_adjusted_predictions <- function(fit,
+                                         y,
+                                         x,
+                                         adj,
+                                         cent,
+                                         days) {
   # Construct data frame for predictions 
-  nd <- construct_datagrid(.model, r, x)
-  # EXTRACT: Expected Values of the Posterior Predictive Distribution ---------
-  expval <- add_epred_draws(.model, newdata = nd, re_formula = NA) 
-  names(expval)[which(names(expval) == x)] <- "xvar"
-  expval$term <- x
-  expval$cov <- cov
-  # EXTRACT: Draws from the Posterior Predictive Distribution -----------------
-  postpred <- add_predicted_draws(.model, newdata = nd, re_formula = NA)
-  names(postpred)[which(names(postpred) == x)] <- "xvar"
-  postpred$term <- x
-  postpred$cov <- cov
-  # Return
-  return(list(expval = expval, postpred = postpred))
+  suffix <- if_else(cent == "gm", "gmz", "pmz")
+  x <- str_glue("{days}_{x}_{suffix}")
+  cat(".")
+  nd <- construct_datagrid(fit, y, x, r = seq(-2, 2, 0.1))
+  # Generate predictions, using brms::posterior_epred
+  predictions(fit,
+              newdata = nd,
+              type = "response",
+              re_formula = NA) |>
+  posterior_draws() |>
+  select(all_of(c(x, "draw")))
 }
+
+
+# Difference between start of sleep and [that person's] median start of
+# sleep [within this time period]. Variance value of days within time
+# period.
+
+tdiff <- function(i) {
+  start_time <- as.POSIXct(i[[1]] * 3600, origin = i[1])
+  end_time <- as.POSIXct(i[[2]] * 3600, origin = i[2])
+  return(as.numeric(difftime(start_time,
+                             end_time,
+                             units = "hours"))) 
+}
+
+clock_diff <- function(i) {
+  # This isn't pretty, but...
+  # ---------------------------------------------------------------------------
+  # I needed away to calculate the difference between two 24 hour clocks. i.e.
+  # 23 vs. 02 = +3
+  # 05 vs. 21 = -8
+  # The approach taken here is to find the smallest interval between 'a' and
+  # and 'b' assuming that these clock times are:
+  # i.    On the same day
+  # ii.   'a' is day before 'b'
+  # iii.  'b' is day before 'a'
+  # The function then returns the smallest absolute interval
+  opts <- list(c("2021-01-01", "2021-01-01"),   # i.
+               c("2021-01-01", "2021-01-02"),   # ii.
+               c("2021-01-02", "2021-01-01"))   # iii.
+  res <- vector(length = 3)
+  for (o in seq_along(opts)) {
+    end_time <- as.POSIXct(i[1] * 3600, origin = opts[[o]][1])
+    start_time <- as.POSIXct(i[2] * 3600, origin = opts[[o]][2])
+    res[o] <- as.numeric(difftime(start_time, end_time, units = "hours"))
+  }
+  return(as.numeric(res[which(abs(res) == min(abs(res)))])[1])
+}
+
+
+ds <- function() format(Sys.time(), "%Y-%m-%d-%H-%M")
