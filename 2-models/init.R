@@ -12,47 +12,37 @@ library(gtsummary)
 library(marginaleffects)
 library(janitor)
 library(splines)
-library(data.table)
+library(conflicted)
+conflicts_prefer(dplyr::mutate,
+                 dplyr::filter)
 source(here("functions.R"), echo = TRUE)
 set_cmdstan_path("~/.cmdstan/cmdstan-2.32.0")
 
 # Set parameters
-verbose <- FALSE
-run_sensitivity <- TRUE
-n_iter <- 40000
+params <- list(verbose = FALSE,
+               run_sensitivity = FALSE,
+               n_iter = 40000,
+               n_thread = threading(5),
+               n_thin = 10)
+
 options(mc.cores = 20,
         brms.backend = "cmdstanr",
         brms.chains = 4)
-n_thread <- threading(5)
 
-# Set minimum number of WEEKDAYS ----------------------------------------------
+# Set minimum number of days per period ---------------------------------------
 
-min_weekdays <- 8
+# This is the minimum number of days that someone needs to provide sleep data to
+# be included in a given 3-month period.
 
-# Functions -------------------------------------------------------------------
-
-make_names <- function(i) {
-    is_adjusted <- ifelse(length(i$adj) == 1, "unadj", "adj")
-    return(str_glue("{i$y}__{i$x}__{is_adjusted}"))
-}
-
-med_summary <- function(x) {
-  tdp <- function(n) { sprintf("%.2f", n) }
-  n_total <- length(x)
-  x <- na.omit(x)
-  n_complete <- length(x)
-  med <- tdp(median(x))
-  mea <- tdp(mean(x))
-  iqr_lo <- tdp(quantile(x, 0.25))
-  iqr_hi <- tdp(quantile(x, 0.75))
-  return(str_glue("{mea} | {med} [{iqr_lo}, {iqr_hi}] ({n_complete}/{n_total})"))
-}
+min_days <- 8
 
 # Load prepared data ----------------------------------------------------------
 
 merged <- readRDS(here("a-data", "clean", "merged.rds"))
 
 # Select required variables ---------------------------------------------------
+
+add_prefix <- \(v) expand_grid(c("wd_", "we_"), v) |> pmap_chr(paste0)
 
 sleep_vars <- c("tst_med",
                 "tst_var",
@@ -66,9 +56,15 @@ sleep_vars <- c("tst_med",
                 "smid_med",
                 "cm3_smid_med",
                 "cm3_smid_var",
-                "sjl")
-     
-id <- c("user_id", "pid", "t", "n_days", "n_weekdays")
+                "sjl") |>
+  add_prefix()
+
+id <- c("user_id",
+        "pid",
+        "t",
+        "n_days",
+        "n_weekdays",
+        "ids_date")
 
 covariates <- c("age", "male",
                 "atyp", "audit",
@@ -76,7 +72,7 @@ covariates <- c("age", "male",
                 "edyrs", "partner", 
                 "sunshine")
 
-outcomes <- c("rel", "rel_mod", "rel_5cat", 
+outcomes <- c("rel_mod",
               "ids_total", "lag_ids_total",
               "ids_nosleep", "lag_ids_nosleep")
 
@@ -86,69 +82,84 @@ dat <- merged |>
 
 # Select analytical samples ----------------------------------------------------
 
-select_sample <- function(.data, .days, ...) {
-  .data |>
+select_sample <- function(data, days, ...) {
+  data |>
     drop_na(...,
             all_of(covariates),
             all_of(sleep_vars)) |>
-    filter(n_weekdays >= min_weekdays) |>
+    filter(n_days >= days,
+           t <= 24) |>
     select(pid, t)
 }
 
-s1 <- select_sample(.data = dat, .days = 8, rel_mod)
-s2 <- select_sample(.data = dat, .days = 8, ids_total, lag_ids_total)
+s1 <- select_sample(data = dat, 
+                    days = 8,
+                    rel_mod)
+
+s2 <- select_sample(data = dat,
+                    days = 8,
+                    ids_total,
+                    lag_ids_total,
+                    ids_nosleep,
+                    lag_ids_nosleep)
 
 # Scale continuous variables --------------------------------------------------
 
+variables_to_log <- c("tst_var", "sol_var", "smid_var") |> add_prefix()
+
 scale_variables <- function(d) {
-  select(d, 
-         all_of(c(sleep_vars, "age", "edyrs", "sunshine", "audit"))) |>
+  continuous_covariates <- c("age", "edyrs", "sunshine", "audit")
+  d |>
+    select(all_of(c("pid", sleep_vars, continuous_covariates))) |>
     ungroup() |>
-    mutate(across(where(~ is.numeric(.x) & min(.x, na.rm = TRUE) > 0),
-                  ~ scale(log(.x)),
-                  .names = "zlog_{.col}"),
+    mutate(# Log-transform some variables
+           across(all_of(add_prefix(c("tst_var", "sol_var", "smid_var"))),
+                  log, .names = "{.col}_log")) |>
+    mutate(# Person-mean 
            across(where(is.numeric),
-                  ~ as.numeric(scale(.x)),
-                  .names = "z_{.col}")) |>
-    select(-all_of(sleep_vars),
-           -age,
-           -edyrs,
-           -audit,
-           -sunshine,
-           -starts_with("z_zlog"))
+                  \(x) mean(x, na.rm = TRUE),
+                  .names = "{.col}_m"),
+           # Person-mean centred
+           across(where(is.numeric),
+                  \(x) x - mean(x, na.rm = TRUE),
+                  .names = "{.col}_pm"),
+           .by = "pid") |>
+    mutate(# Grand-mean centred
+           across(where(is.numeric),
+                  \(x) x - mean(x, na.rm = TRUE),
+                  .names = "{.col}_gm"),
+           across(where(is.numeric),
+                  \(x) scale(x, center = FALSE),
+                  .names = "{.col}z")) |>
+  select(-all_of(c("pid", sleep_vars, continuous_covariates)),
+         -matches("m_gmz|m_pmz|pm_gmz|varz$|medz$|logz$|log$"),
+         -ends_with("m"))
 }
 
 # Select transformations to use in models -------------------------------------
 
 trans <- c(# Sleep duration (4 measures) ======================================
-           # Total sleep time
-           "z_tst_med",          # median (1)
-           "zlog_tst_var",       # variance (2)
-           # Change in total sleep time
-           "z_cm3_tst_med",      # median (3)
-           "z_cm3_tst_var",      # variance (4)
+           "tst_med",          # Median total sleep time
+           "tst_var_log",      # Variance total sleep time
+           "cm3_tst_med",      # Δ median total sleep time
+           "cm3_tst_var",      # Δ variance total sleep time
            # Sleep quality (4 measures) =======================================
-           # Sleep efficiency
-           "z_slpeff_med",       # median (1)
-           # Sleep fragmentation index
-           "z_sfi_med",          # median (2)
-           # Sleep onset latency
-           "z_sol_med",          # median (3)
-           "zlog_sol_var",       # variance (4)
+           "slpeff_med",       # Median sleep efficiency
+           "sfi_med",          # Median sleep fragmentation index
+           "sol_med",          # Median sleep onset latency
+           "sol_var_log",      # Variance sleep onset latency
            # Sleep regularity (5 measures) ====================================
-           # Sleep midpoint
-           "z_smid_med",         # median this month (1)
-           "zlog_smid_var",      # variance this month (2)
-           "z_cm3_smid_med",     # change in median (3)
-           "z_cm3_smid_var",     # change in variance (4)
-           # Social jet lag
-           "z_sjl")              # (5)
+           "smid_med",         # Median sleep midpoint
+           "smid_var_log",     # Variance sleep midpoint
+           "cm3_smid_med",     # Δ median sleep midpoint
+           "cm3_smid_var",     # Δ variance sleep midpoint
+           "sjl")          # Mean social jet lag
 
-zcov <- c("z_age", "male",
-          "atyp", "z_audit",
+zcov <- c("agez", "male",
+          "atyp", "auditz",
           "med_depress", "med_other", "med_sleep",
-          "z_edyrs", "partner", 
-          "z_sunshine")
+          "edyrsz", "partner", 
+          "sunshinez")
 
 # Save ------------------------------------------------------------------------
 
