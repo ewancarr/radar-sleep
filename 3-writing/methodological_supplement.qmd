@@ -1,8 +1,8 @@
 ---
 title: Methodological supplement
 author: Ewan Carr
-date: 2023-03-03
-date-format: short
+date: 2023-05-12
+date-format: long
 format:
   pdf:
     pdf-engine: "xelatex"
@@ -22,12 +22,12 @@ editor_options:
 
 \clearpage
 
-```{r setup}
+```{r Setup}
 #| message: false
 #| echo: false
 #| results: hide
-source(here::here("models", "init.R"), echo = FALSE)
-source(here::here("cleaning", "extra", "labels.R"), echo = FALSE)
+source(here::here("2-models", "init.R"), echo = FALSE)
+source(here::here("1-cleaning", "extra", "labels.R"), echo = FALSE)
 library(gt)
 library(ggmcmc)
 library(brms)
@@ -40,81 +40,83 @@ knitr::opts_chunk$set(cache = FALSE, warning = FALSE,
 
 # Measures
 
-## Sleep features
+## Derivation of sleep features
 
-We considered 13 sleep features, organised into three domains:
+We considered 13 sleep features organised into three domains:
 
-| Domain           | Feature                               | Definition                                                                                                                                                                                          |
-|-------------------------|----------------------|-------------------------|
-| Sleep duration   | Total sleep time†                     | Median daily hours spent asleep.                                                                                                                                                                    |
-|                  | Change in total sleep time‡           | Difference in median daily hours spent asleep over the four weeks before the current outcome assessment (T2) versus the four weeks before to the previous outcome assessment three months ago (T1). |
-|                  | Total sleep time, variance†           | Intra-individual variance in median daily hours spent asleep.                                                                                                                                       |
-|                  | Change in total sleep time, variance‡ | Difference in intra-individual variance in median daily hours asleep from T2 to T1.                                                                                                                 |
-| Sleep quality    | Sleep efficiency†                     | Median hours spent asleep as a proportion of hours spent in bed per day.                                                                                                                            |
-|                  | Sleep fragmentation index†            | Median daily number of awakenings per hour of sleep.                                                                                                                                                |
-|                  | Sleep onset latency†                  | Median time between last recorded step taken and Fitbit-derived sleep onset each day.                                                                                                               |
-|                  | Sleep onset latency variance†         | Intra-individual variance in median sleep onset.                                                                                                                                                    |
-| Sleep regularity | Sleep midpoint†                       | Median midpoint between sleep onset and sleep offset.                                                                                                                                               |
-|                  | Sleep midpoint, variance†             | Intra-individual variance in median sleep midpoint.                                                                                                                                                 |
-|                  | Change in sleep midpoint‡             | Difference in median sleep midpoint from T2 to T1.                                                                                                                                                  |
-|                  | Change in sleep midpoint variance‡    | Difference in intra-individual variance in median sleep midpoint from T2 to T1.                                                                                                                     |
-|                  | Social jet lag†                       | Absolute difference between weekday and weekend sleep midpoints.                                                                                                                                    |
+| Domain           | Feature                                 | Definition                                                                                                                                                                                              | Derivation of sleep feature                                                                                                                                                                                                                                                                                 |
+|------------------|-----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Sleep duration   | Total sleep time^†^                     | Median daily hours spent asleep.                                                                                                                                                                        | The sum of all 'non-awake' Fitbit sleep stages (i.e., light, deep, and REM).                                                                                                                                                                                                                                |
+|                  | Change in total sleep time^‡^           | Difference in median daily hours spent asleep over the four weeks before the current outcome assessment (T~2~) versus the four weeks before to the previous outcome assessment three months ago (T~1~). | As above.                                                                                                                                                                                                                                                                                                   |
+|                  | Total sleep time, variance^†^           | Intra-individual variance in median daily hours spent asleep.                                                                                                                                           | As above.                                                                                                                                                                                                                                                                                                   |
+|                  | Change in total sleep time, variance^‡^ | Difference in intra-individual variance in median daily hours asleep from T~2~ to T~1~.                                                                                                                 | As above.                                                                                                                                                                                                                                                                                                   |
+| Sleep quality    | Sleep efficiency^†^                     | Median hours spent asleep as a proportion of hours spent in bed per day.                                                                                                                                | Hours spent asleep calculated as above ('total sleep time'). Hours spent in bed calculated as interval between 'sleep onset' (the start of the first 'non-awake' stage of the current sleep event) and 'sleep offset' (the end of the last 'non-awake' stage).                                              |
+|                  | Sleep fragmentation index^†^            | Median daily number of awakenings divided by the hours spent asleep.                                                                                                                                    | The number of awakenings was calculated as the number of times (during each sleep event) that the participant was awake (i.e., not in one of the four sleep stages) for more than five minutes.                                                                                                             |
+|                  | Sleep onset latency^†^                  | Median time between last recorded step taken and Fitbit-derived sleep onset each day.                                                                                                                   | Sleep onset was derived as the clock time of the first non-awake sleep stage for a given sleep event. The timing of the 'last recorded step' is defined below.                                                                                                                                              |
+|                  | Sleep onset latency variance^†^         | Intra-individual variance in median sleep onset.                                                                                                                                                        | As above.                                                                                                                                                                                                                                                                                                   |
+| Sleep regularity | Sleep midpoint^†^                       | Median midpoint between sleep onset and sleep offset.                                                                                                                                                   | For each sleep event , sleep onset was derived as the clock time of the start of the first 'non-awake' stage. Sleep offset was similarly derived as the end of the last 'non-awake' stage. Both onset and offset were centred around midnight, such that 0 represented midnight and -12 represented midday. |
+|                  | Sleep midpoint, variance^†^             | Intra-individual variance in median sleep midpoint.                                                                                                                                                     | As above.                                                                                                                                                                                                                                                                                                   |
+|                  | Change in sleep midpoint^‡^             | Difference in median sleep midpoint from T~2~ to T~1~.                                                                                                                                                  | As above.                                                                                                                                                                                                                                                                                                   |
+|                  | Change in sleep midpoint variance^‡^    | Difference in intra-individual variance in median sleep midpoint from T~2~ to T~1~.                                                                                                                     | As above.                                                                                                                                                                                                                                                                                                   |
+|                  | Social jet lag^†^                       | Absolute difference between weekday and weekend sleep midpoints.                                                                                                                                        | As above.                                                                                                                                                                                                                                                                                                   |
 
-† Measured over the four weeks prior to each outcome assessment.\
-‡ Measured as the change between the four weeks before the current
-outcome assessment (T2) and the four weeks before the previous outcome
-assessment three months ago (T1)
+^†^ Measured over the four weeks prior to each outcome assessment.\
+^‡^ Measured as the change between the four weeks before the current
+outcome assessment (T~2~) and the four weeks before the previous outcome
+assessment three months ago (T~1~)
 
-Each feature was derived based on information collected in the 4 weeks
-prior to the 3-monthly outcome assessment. For features measuring a
-change in sleep (e.g., Δ total sleep time), we calculated the difference
-between sleep over the past 4 weeks and sleep in the same period at the
-previous outcome assessment:
+Each sleep feature was derived using information collected in the four
+weeks prior to each 3-monthly outcome assessment. For features measuring
+a change in sleep (e.g., Δ total sleep time), we calculated the
+difference between sleep over the past 4 weeks and sleep in the same
+period at the previous outcome assessment:
 
 ![](figures/explain_windows.png){fig-align="center"}
 
 ### Derivation of daily sleep features
 
--   Sleep was continuously recorded by FitBit devices and summarised as
-    a daily measure.
+The included sleep features are described in the table above. These
+features have previously been defined by Zhang et al., [-@zhang2021] in
+an existing analysis of RADAR-MDD.
 
--   On most days, participants had a single 'sleep event' (i.e., a
-    continuous episode of sleep). However, on around 10% of days
-    participants recorded multiple sleep events. On those days, we used
-    information for the primary sleep event only, identified as the
-    largest continuous sleep event. Shorter sleep events (e.g., naps)
-    were discarded.
+Sleep parameters were continuously recorded by Fitbit devices. From this
+information, we derived aggregate daily summaries for each participant
+during follow-up.
 
-Most sleep features were derived directly from the FitBit data (e.g.,
-total hours of sleep), but some required further processing:
+On most days, participants had a single 'sleep event' (i.e., an episode
+of sleep starting with 'sleep onset' and ending with 'sleep offset').
+However, on around 10% of days participants recorded multiple sleep
+events. On those days, we used information for the primary sleep event
+only, identified as the largest continuous sleep event. Shorter sleep
+events (e.g., naps) were discarded.
 
--   **Onset latency** refers to the time between going to bed and
-    falling asleep (sleep onset). We derived this by combining
-    information on sleep with information on physical activity.
-    Specifically, we defined onset latency as the period between the
-    last step recorded (via FitBit) and the onset of sleep (via FitBit).
+Almost all sleep features were derived directly from the daily Fitbit
+data (e.g., total hours of sleep). One feature, **onset latency**,
+required further processing:
+
+**Onset latency** refers to the time between going to bed and falling
+asleep (sleep onset). Since 'time of going to bed' was not provided by
+Fitbit, we instead derived this information by combining information
+from Fitbit on sleep and physical activity. Specifically, we defined
+onset latency as the period between the last step recorded (based on
+physical activity information provided by Fitbit) and the onset of sleep
+(defined in the table above). This is illustrated below:
 
 ![](figures/deriving_onset_latency.png){fig-align="center"}
 
 ### Derivation of sleep features in the four weeks before each outcome assessment
 
--   We derived sleep features by summarising the daily measures over the
-    four weeks before each 3-monthly outcome assessment. Each feature
-    represented the median or variance of the available daily values.
+From the daily aggregate measures, we derived sleep features summarising
+sleep over the four weeks prior to each 3-monthly outcome assessment.
+Each feature represented the median or variance of the available daily
+values.
 
--   We used information for weekdays only (with the exception of "social
-    jetlag") to avoid overestimating variability due to differences
-    between weekdays versus weekends.
-
--   At each 3-monthly assessment, we included participants who provided
-    sleep information on at least 8 (non-consecutive) weekdays over the
-    previous four weeks. We chose a minimum of 8 weekdays to provide
-    reliable summaries whilst minimising selection bias (participants
-    wearing their FitBit for more than eight days tended to have lower
-    depressive symptoms and more stable sleep patterns).
-
--   "Social jet lag" was calculated as the difference in the mean sleep
-    midpoints for weekdays versus weekends.
+At each 3-monthly assessment, we included participants who provided
+sleep information on at least 8 (non-consecutive) days over the previous
+four weeks. We chose a minimum of 8 days to provide reliable summaries
+whilst minimising selection bias (participants wearing their Fitbit for
+more than eight days tended to have lower depressive symptoms and more
+stable sleep patterns).
 
 ## Covariates
 
@@ -175,39 +177,42 @@ Disorders Identification Test (AUDIT).
 
 ### Hours of daylight
 
-To account for seasonal differences in sleep and mood, we adjusted for the 
-mean hours of sunshine in the four weeks before each three-monthly outcome 
-assessment.
+To account for seasonal differences in sleep and mood, we adjusted for
+the mean hours of sunshine in the four weeks before each three-monthly
+outcome assessment.
 
-Information from the World Meteorological Organization (WMO) was extracted from
-UNdata[^un] for three cities corresponding to the three RADAR-MDD sites:
+Information from the World Meteorological Organization (WMO) was
+extracted from UNdata[^1] for three cities corresponding to the three
+RADAR-MDD sites:
 
-WMO city                                RADAR-MDD site
---------------------------------------  --------------------
-De Bilt, Utrecht, The Netherlands.      Amsterdam
-London Gatwick, London, United Kingdom. King's College London
-Madrid, Spain                           CIBER Madrid
+[^1]: <http://data.un.org/Data.aspx?d=CLINO&f=ElementCode%3a15>
 
-WMO define hours of sunshine as the period during which direct solar irradiance
-exceeds 120 watts per square meter. This value is equivalent to the level of solar irradiance shortly after sunrise or shortly before sunset in cloud-free conditions.
+| WMO city                                | RADAR-MDD site        |
+|:----------------------------------------|:----------------------|
+| De Bilt, Utrecht, The Netherlands.      | Amsterdam             |
+| London Gatwick, London, United Kingdom. | King's College London |
+| Madrid, Spain                           | CIBER Madrid          |
 
-[^un]: <http://data.un.org/Data.aspx?d=CLINO&f=ElementCode%3a15>
+WMO define hours of sunshine as the period during which direct solar
+irradiance exceeds 120 watts per square meter. This value is equivalent
+to the level of solar irradiance shortly after sunrise or shortly before
+sunset in cloud-free conditions.
 
 # Computing
 
 ## Software
 
-All analyses were conducted in R 4.2.2. The main packages used were:
+All analyses were conducted in R 4.2.3. The main packages used were:
 
 -   [`brms`](https://CRAN.R-project.org/package=brms) 2.18;
 
 -   [`cmdstanr`](https://mc-stan.org/cmdstanr/) 0.5.3, using
-    [CmdStan](https://mc-stan.org/users/interfaces/cmdstan) 2.30.1;
+    [CmdStan](https://mc-stan.org/users/interfaces/cmdstan) 2.32.0;
 
 -   [`tidyverse`](https://CRAN.R-project.org/package=tidyverse) 2.0.0;
 
 -   [`marginaleffects`](https://CRAN.R-project.org/package=marginaleffects)
-    0.10.0.
+    0.11.1.
 
 A full list of packages is provided in the `renv.lock` file.
 
@@ -224,11 +229,10 @@ All code for this analysis can be found at
 
 # Modelling
 
-## Standardisation and transformation of sleep features
+## Transformation and trimming of sleep features
 
-All sleep features were standardised (mean = 0; standard deviation = 1)
-prior to modelling. Three features that measured variance were
-additionally log-transformed to improve estimation and MCMC sampling:
+Three sleep features measuring variability were log-transformed to
+improve estimation and MCMC sampling:
 
 -   Total sleep time variance;
 
@@ -236,12 +240,37 @@ additionally log-transformed to improve estimation and MCMC sampling:
 
 -   Sleep midpoint variance.
 
-Three features were winsorised by setting extreme values to specified
+Two features were winsorised by setting extreme values to specified
 limits:
 
 -   Sleep midpoint (winsorised at midday);
 
 -   Social jet lag (winsorised at ±5 hours)
+
+## Centering and standardisation of sleep features
+
+Following Curran and Bauer [-@curran2011], all sleep features were
+person-mean centred. For each participant and each sleep feature, this
+involved subtracting the mean of their repeated assessments (throughout
+follow-up) from each the current value of the sleep feature (for the
+current 3-month period). For example, suppose an individual participated
+at five follow-up assessments, where their total sleep time was recorded
+as:
+
+$$
+\text{Total sleep time} = \left [ \begin{array}{rrrrr} 5.3, & 7.4, & 4.9, & 6.3, & 7.5 \end{array} \right ]
+$$
+
+Their mean across the five assessments would be $6.3$ hours, and their
+person-mean centred values would be:
+
+$$
+\text{Total sleep time}_{\text{Person-mean centred}} = \left [ \begin{array}{ccccc}  -1.0, & 1.1, & -1.4, & 0.0, & 1.2 \end{array} \right ]
+$$
+
+After centring, we then standardised the centred values by dividing by
+the standard deviation of the sample (separately for the 'depression
+relapse' and 'depression severity' samples).
 
 ## Prior distributions
 
@@ -261,27 +290,34 @@ log-odds of 2.5) or less than 0.08 (a log-odds of -2.5).
 
 ```{r, cache.lazy = FALSE}
 #| echo: false
-load(here("models", "samples", "relmod_fit.Rdata"))
+fit <- list()
+fit$relmod <- readRDS(here("2-models", "samples",
+                           "2023-05-05-16-15_relmod.rds"))
 
-print(prior_summary(fit_relmod[[1]], all = FALSE), show_df = FALSE)
+print(prior_summary(fit$relmod$fit[[1]], all = FALSE), show_df = FALSE)
 ```
 
 ### Priors for linear regression models
 
 ```{r, cache.lazy = FALSE}
 #| echo: false
-load(here("models", "samples", "ids_fit.Rdata"))
+fit$ids <- readRDS(here("2-models", "samples",
+                        "2023-05-06-17-11_ids.rds"))
 
-print(prior_summary(fit_ids[[1]], all = FALSE), show_df = FALSE)
+print(prior_summary(fit$ids$fit[[1]], all = FALSE), show_df = FALSE)
 ```
 
 # Posterior summaries
 
-```{r}
-#| echo: false
-# Select models to plot
-sel_ids <- fit_ids |> keep(str_detect(names(fit_ids), "^ids_total__.*__adj"))
-sel_relmod <- fit_relmod |> keep(str_detect(names(fit_relmod), "__adj$"))
+```{r Select models to plot}
+#| echo: true
+sel_ids <- fit$ids |>
+  filter(y == "ids_total",
+         adj != "")
+
+sel_relmod <- fit$relmod |>
+  filter(y == "rel_mod",
+         adj != "")
 ```
 
 ## Depression relapse
@@ -311,12 +347,8 @@ print_model <- function(fit, .label) {
           labs(title = "Posterior predictive check")
   )
   
-  picks <- str_subset(names(fit$fit),
-                      paste0("^z_1\\[|^r_pid\\[|b_z_age|b_maleTRUE|",
-                    "b_atypTRUE|b_z_audit|b_med.*|b_z_edyrs|",
-                    "b_partnerTRUE|b_z_sunshine|sigma|lprior|lp__|^Intercept$"),
-             negate = TRUE)
-  
+  picks <- str_subset(names(fit$fit), "^b_we_.*_pmz$")
+
   print(mcmc_plot(fit,
                   type = "trace",
                   variable = picks) +
@@ -338,10 +370,10 @@ print_model <- function(fit, .label) {
 #| echo: false
 #| output: asis
 #| eval: true
-for (i in seq_along(sel_relmod)) {
-  feat <- str_split(names(sel_relmod)[[i]], "__")[[1]][2]
+for (i in 1:nrow(sel_relmod)) {
+  feat <- str_glue("we_{sel_relmod$x[i]}_pmz")
   lab <- labels[labels$x == feat,]$label_orig
-  print_model(sel_relmod[[i]], .label = lab)
+  print_model(sel_relmod$fit[[i]], .label = lab)
 }
 ```
 
@@ -351,9 +383,15 @@ for (i in seq_along(sel_relmod)) {
 #| echo: false
 #| output: asis
 #| eval: true
-for (i in seq_along(sel_ids)) {
-  feat <- str_split(names(sel_ids)[[i]], "__")[[1]][2]
+for (i in 1:nrow(sel_ids)) {
+  feat <- str_glue("we_{sel_ids$x[i]}_pmz")
   lab <- labels[labels$x == feat,]$label_orig
-  print_model(sel_ids[[i]], .label = lab)
+  print_model(sel_ids$fit[[i]], .label = lab)
 }
+# 
+# for (i in seq_along(sel_ids)) {
+#   feat <- str_split(names(sel_ids)[[i]], "__")[[1]][2]
+#   lab <- labels[labels$x == feat,]$label_orig
+#   print_model(sel_ids[[i]], .label = lab)
+# }
 ```
