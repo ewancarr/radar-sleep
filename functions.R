@@ -13,7 +13,7 @@ winsor <- function(x, at = c(-5, 5)) {
 }
 
 print_n <- function(d) {
-  cat("\nNo. participants: ", length(unique(d$user_id)),
+  cat("\nNo. participants: ", length(unique(d$pid)),
       "\nNo. observations: ", nrow(d), "\n\n")
 }
 
@@ -114,6 +114,5 @@ clock_diff <- function(i) {
   }
   return(as.numeric(res[which(abs(res) == min(abs(res)))])[1])
 }
-
 
 ds <- function() format(Sys.time(), "%Y-%m-%d-%H-%M")
