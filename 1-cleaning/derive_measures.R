@@ -78,6 +78,16 @@ sel <- sel |>
 
 stopifnot(nrow(sel) == nrow(distinct(sel, user_id, t, merge_date)))
 
+# Remove sleep events that occur before the baseline assessment ---------------
+
+date_of_baseline <- survey |>
+  filter(t == 0) |>
+  distinct(user_id, baseline = ids_date)
+
+sel <- full_join(sel, date_of_baseline, join_by("user_id"))
+sel$invalid <- sel$merge_date < sel$baseline
+sel <- filter(sel, !invalid)
+
 # Select/rename required sleep variables --------------------------------------
 
 sel <- sel |>
