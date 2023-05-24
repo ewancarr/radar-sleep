@@ -20,6 +20,7 @@ set_cmdstan_path("~/.cmdstan/cmdstan-2.32.0")
 
 # Set parameters
 params <- list(verbose = FALSE,
+               all_options = FALSE,
                run_sensitivity = FALSE,
                n_iter = 40000,
                n_thread = threading(5),
@@ -78,30 +79,36 @@ outcomes <- c("rel_mod",
 
 dat <- merged |> 
   ungroup() |> 
-  select(all_of(c(id, outcomes, sleep_vars, covariates)))
+  select(all_of(c(id, outcomes, sleep_vars, covariates))) |>
+  filter(t <= 24,
+         n_days >= min_days)
 
 # Select analytical samples ----------------------------------------------------
 
-select_sample <- function(data, days, ...) {
-  data |>
-    drop_na(...,
-            all_of(covariates),
-            all_of(sleep_vars)) |>
-    filter(n_days >= days,
-           t <= 24) |>
-    select(pid, t)
-}
+# 1. Depression relapse
 
-s1 <- select_sample(data = dat, 
-                    days = 8,
-                    rel_mod)
+s1 <- dat |>
+  select(pid, t,
+         rel_mod,
+         all_of(covariates),
+         all_of(sleep_vars)) |>
+  drop_na() |>
+  select(pid, t)
 
-s2 <- select_sample(data = dat,
-                    days = 8,
-                    ids_total,
-                    lag_ids_total,
-                    ids_nosleep,
-                    lag_ids_nosleep)
+print_n(s1)
+
+# 2. Depression severity
+
+s2 <- dat |>
+  select(pid, t,
+         ids_total, lag_ids_total,
+         ids_nosleep, lag_ids_nosleep,
+         all_of(covariates),
+         all_of(sleep_vars)) |>
+  drop_na() |>
+  select(pid, t)
+
+print_n(s2)
 
 # Scale continuous variables --------------------------------------------------
 
@@ -133,7 +140,8 @@ scale_variables <- function(d) {
                   .names = "{.col}z")) |>
   select(-all_of(c("pid", sleep_vars, continuous_covariates)),
          -matches("m_gmz|m_pmz|pm_gmz|varz$|medz$|logz$|log$"),
-         -ends_with("m"))
+         -ends_with("m")) |>
+  mutate(across(everything(), as.numeric))
 }
 
 # Select transformations to use in models -------------------------------------

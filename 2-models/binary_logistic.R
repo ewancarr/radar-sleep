@@ -18,7 +18,7 @@ source(here("functions.R"), echo = TRUE)
 
 # Select sample ---------------------------------------------------------------
 
-d_relapse <- right_join(dat, s1, by = c("pid", "t"))
+d_relapse <- inner_join(dat, s1, join_by("pid", "t"))
 d_relapse <- bind_cols(d_relapse, scale_variables(d_relapse))
 
 # Specify models --------------------------------------------------------------
@@ -29,6 +29,11 @@ opt_relmod <- expand_grid(y = "rel_mod",
                           cent = c("pm", "gm"),
                           days = c("wd", "we"))
 
+if (!params$all_options) {
+  opt_relmod <- filter(opt_relmod,
+                       cent == "pm",
+                       days == "we")
+}
 
 construct_formula <- function(.y, .x, .adj, .cent, .days) {
   if (.cent == "gm") {
@@ -98,8 +103,7 @@ opt_relmod$pred <-
 # Save main models ------------------------------------------------------------
 
 saveRDS(opt_relmod, 
-        file = here("2-models", "samples", "final", 
-                    str_glue("{ds()}_relmod_.rds")))
+        file = here("2-models", "samples", str_glue("{ds()}_relmod.rds")))
 opt_relmod <- select(opt_relmod, -fit, -ame, -pred)
 
 ###############################################################################
@@ -146,7 +150,7 @@ test_interaction <- function(y, x, adj, days, data, ...) {
                                max_treedepth = 15),
                 ...) |>
     add_criterion("kfold")
-  m_wo <- brm(f_with, 
+  m_wo <- brm(f_wo, 
               data = data,
               family = bernoulli(),
               prior = set_prior("normal(0, 1.5)", class = "b"),
@@ -169,7 +173,7 @@ if (params$run_sensitivity) {
                                             threads = params$n_thread)
                          })
   saveRDS(opt_relmod,
-          file = here("2-models", "samples", "final", 
+          file = here("2-models", "samples",
                       str_glue("{ds()}_relmod_int.rds")))
 }
 

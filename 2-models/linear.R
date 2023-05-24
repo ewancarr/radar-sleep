@@ -18,6 +18,12 @@ opt_ids <- expand_grid(y = c("ids_total", "ids_nosleep"),
                        cent = c("pm", "gm"),
                        days = c("wd", "we"))
 
+if (!params$all_options) {
+  opt_ids <- filter(opt_ids,
+                       cent == "pm",
+                       days == "we")
+}
+
 # Generate formula for each model ---------------------------------------------
 
 make_formula <- function(y, x, adj, cent, days) {
@@ -152,7 +158,7 @@ if (params$run_sensitivity) {
                                          threads = params$n_thread)
                       })
   saveRDS(opt_ids,
-          file = here("2-models", "samples", "final",
+          file = here("2-models", "samples",
                       str_glue("{ds()}_ids_int.rds")))
 }
 
