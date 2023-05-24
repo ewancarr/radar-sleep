@@ -565,7 +565,7 @@
     },
     "data.table": {
       "Package": "data.table",
-      "Version": "1.14.8",
+      "Version": "1.14.9",
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "b4c06e554f33344e044ccd7fdca750a9",
