@@ -5,10 +5,13 @@
 library(tidyverse)
 
 relabel <- function(x) {
-  transform <- case_when(str_detect(x, "z_") ~ " (Centered, scaled)",
-                         str_detect(x, "c_") ~ " (Centered)",
-                         str_detect(x, "zlog_") ~ " (Log, scaled)",
-                         TRUE ~ "")
+  transform <- case_when(
+    str_detect(x, "_log_gmz$") ~ "Grand-mean centred, log-transformed, scaled",
+    str_detect(x, "_log_pmz$") ~ "Person-mean centred, log-transformed, scaled",
+    str_detect(x, "_gmz$") ~ "Grand-mean centred, scaled",
+    str_detect(x, "_pmz$") ~ "Person-mean centred, scaled",
+    str_detect(x, "z$") ~ "Scaled",
+    TRUE ~ "")
   group <- case_when(str_detect(x, "tst") ~ "Duration",
                      str_detect(x, "slpeff") ~ "Quality",
                      str_detect(x, "son") ~ "Regularity",
@@ -18,7 +21,6 @@ relabel <- function(x) {
                      str_detect(x, "sol") ~ "Quality",
                      str_detect(x, "sfi") ~ "Quality",
                      str_detect(x, "smid") ~ "Regularity",
-                     str_detect(x, "hysom_ever") ~ "Other",
                      str_detect(x, "sjl") ~ "Regularity")
   measure <- case_when(str_detect(x, "tst") ~ "Total sleep time",
                        str_detect(x, "slpeff") ~ "Sleep efficiency",
@@ -29,7 +31,6 @@ relabel <- function(x) {
                        str_detect(x, "sol") ~ "Sleep onset latency",
                        str_detect(x, "sfi") ~ "Sleep fragmentation index",
                        str_detect(x, "smid") ~ "Sleep midpoint",
-                       str_detect(x, "hysom_ever") ~ "Ever slept >10h",
                        str_detect(x, "sjl") ~ "Social jet lag")
   units <- case_when(str_detect(x, "tst") ~ "hours",
                      str_detect(x, "slpeff") ~ "score (0-100)",
@@ -40,7 +41,6 @@ relabel <- function(x) {
                      str_detect(x, "sol") ~ "hours",
                      str_detect(x, "sfi") ~ "score",
                      str_detect(x, "smid") ~ "clock time",
-                     str_detect(x, "hysom_ever") ~ "0/1",
                      str_detect(x, "sjl") ~ "hours")
   x_label <- case_when(str_detect(x, "tst") ~ "Total hours of sleep",
                        str_detect(x, "slpeff") ~ "Sleep efficiecy",
@@ -52,7 +52,6 @@ relabel <- function(x) {
                        str_detect(x, "sol") ~ "Sleep onset latency, hours",
                        str_detect(x, "sfi") ~ "Sleep fragmentation index",
                        str_detect(x, "smid") ~ "Sleep midpoint",
-                       str_detect(x, "hysom_ever") ~ "Proportion of periods sleeping >12 hours",
                        str_detect(x, "sjl") ~ "Social jet lag, hours")
   stat <- case_when(str_detect(x, "_med") ~ ", median",
                     str_detect(x, "_var") ~ ", variance",
@@ -68,6 +67,9 @@ relabel <- function(x) {
            st = stat))
 }
 
-labels <- map_dfr(trans, relabel) |>
-  mutate(label_trans = str_glue("{ch}{mea}{st}{tr}"),
+labels <- map_dfr(trans, \(f) {
+  bind_rows(relabel(paste0("we_", str_replace(f, "_log$", ""))),
+            relabel(str_glue("we_{f}_pmz"))) |>
+  mutate(label_trans = str_glue("{ch}{mea}{st}\n\n{tr}"),
          label_orig = str_glue("{ch}{mea}{st}"))
+})
