@@ -16,6 +16,7 @@ format:
     toc-location: right
     toc-depth: 3
     self-contained: true
+
 bibliography: references.bib
 editor_options: 
   chunk_output_type: console
@@ -34,6 +35,11 @@ library(gtsummary)
 library(paletteer)
 library(patchwork)
 library(ggdist)
+library(naniar)
+library(fs)
+library(conflicted)
+conflicts_prefer(dplyr::first)
+conflicts_prefer(dplyr::filter)
 load(here("a-data", "clean", "for_modelling.Rdata"))
 source(here("1-cleaning", "extra", "labels.R"))
 source(here("functions.R"))
@@ -54,129 +60,24 @@ switch_decimal <- function(x) {
   str_replace_all(x, "\\.", "·")
 }
 
+fix_decimals <- function(tbl) {
+  # Replace all "." in a gt table with "·".
+  tbl |>
+  text_transform(cells_body(),
+                 function(x) str_replace(x, "\\.", "·"))
+}
+
+relabel_outcomes <- function(x) {
+  lev <- c("Depression relapse",
+           "Depression severity",
+           "Depression severity (sleep items removed)")
+  factor(case_match(x,
+                    "rel_mod" ~ lev[1],
+                    "ids_total" ~ lev[2],
+                    "ids_nosleep" ~ lev[3]),
+         levels = lev)
+}
 ```
-
-# Methods
-
-## Outcomes
-
-### 1. Modified relapse
-
-This is modified to exclude participants with 'persistent high severity'.
-
-| y   | Criteria                                                            |
-|------------|------------------------------------------------------------|
-| 1   | Meeting criteria for CIDI-SF **and** scoring \> 25 on IDS-SR.       |
-| 0   | *Not* meeting criteria for relapse **and** scoring ≤ 25 on IDS-SR.  |
-| NA  | *Not* meeting criteria for relapse **and** scoring \> 25 on IDS-SR. |
-
-### 2. IDS severity
-
-Total score at current 3-monthly survey.
-
-## Sleep measures
-
-At each 3-monthly survey, we're measuring:
-
-1.  Sleep over the previous 4 weeks;
-2.  Change in sleep between the previous survey (3 months ago) and now.
-
-We're measuring sleep on weekdays only. (With the exception of 'social jet
-lag'). To be included at a given survey, participants needed to provide sleep
-data for at least 5 weekdays.
-
-We're considering 3 types of measure:
-
-* **Sleep duration** (4)
-  - Total time
-  - Total time, variance
-  - Δ Total time
-  - Δ Total time, variance
-* **Sleep quality** (4)
-  - Efficiency
-  - Fragmentation index
-  - Onset latency
-  - Onset latency variance
-* **Sleep regularity** (5)
-  - Sleep midpoint
-  - Sleep midpoint variance
-  - Δ Sleep midpoint
-  - Δ Sleep midpoint variance
-  - Social jet lag
-
-
-## Covariates
-
-We're adjusting for:
-
-- Age at enrolment
-- Male gender (0/1)
-- Medications
-  - Whether taking depression medication (0/1)
-  - Whether taking sleep medication (0/1)
-  * Whether taking other medication (0/1)
-- Years of education
-- Partnership status
-* Hours of sunshine last month
-
-## Statistical analyses
-
-- Binary logistic regression for relapse; linear regression
-  for IDS-SR.
-- Outcomes are measured repeatedly, at months 3-24.
-- Data are pooled for analysis with individual random intercepts.
-- All models estimated using Bayesian methods in
-  [brms](https://paul-buerkner.github.io/brms/)/R.
-- We consider non-linear effects of sleep, via quadratic terms.
-
-The binary models are fairly straightforward, e.g.:
-
-```r
-y ~ sleep + sleep^2 + covariates + (1 | pid)
-```
-
-The linear models are a bit more involved:
-
-- We're modelling the current IDS score while adjusting for the previous score
-  (three months ago).
-- We're including non-linear terms for the previous IDS score, to allow for the
-  possibility of (i) negative effects of high past severity on future severity;
-  and (ii) positive effects of low past severity on future severity. (This was
-  suggested by Ingeborg).
-- We're allowing for the effect of sleep to vary by previous depression
-  severity.
-
-Something like:
-
-``` r
-current_ids ~ previous_ids + sleep + (sleep*previous_ids) + (1 | pid)   
-```
-
-But where we include quadratic effects for all terms (`sleep` and
-`previous_ids`).
-
-## Sensitivity analyses
-
-### 1. Differences by depression subtype
-
-We will test whether the effect of sleep on each outcome is moderated by
-'atypical' depression subtype.
-
-This will be tested by comparing models with and without an interaction term
-(sleep $\times$ atypical subtype) for each sleep measure.
-
-Models are compared using leave-one-out cross-validation (LOO; @vehtari2017)
-
-[@vehtari2017]
-
-### 2. Remove sleep items from IDS-SR
-
-We will repeat the IDS-SR models after removing the 4 questions about sleep:
-
-1. Falling asleep
-2. Sleep during the night
-3. Waking up too early
-4. Sleeping too much
 
 # Results
 
@@ -198,16 +99,30 @@ print_n(survey)
 merged <- readRDS(here("a-data", "clean", "merged.rds"))
 
 # Specify required variables
-sleep_vars <- c("tst_med", "tst_var", "cm3_tst_med", "cm3_tst_var", "slpeff_med",
-                "sfi_med", "sol_med", "sol_var", "smid_var", "smid_med", "cm3_smid_med",
-                "cm3_smid_var", "sjl")
+sleep_vars <- c("tst_med",
+                "tst_var",
+                "cm3_tst_med",
+                "cm3_tst_var",
+                "slpeff_med",
+                "sfi_med",
+                "sol_med",
+                "sol_var",
+                "smid_var",
+                "smid_med",
+                "cm3_smid_med",
+                "cm3_smid_var",
+                "sjl")
+sleep_vars <- paste0("we_", sleep_vars)
+
 id <- c("user_id", "pid", "t", "n_days", "n_weekdays")
+
 covariates <- c("age", "male",
                 "atyp", "audit",
                 "med_depress", "med_other", "med_sleep",
                 "edyrs", "partner", 
                 "sunshine")
-outcomes <- c("rel", "rel_mod", "rel_5cat", 
+
+outcomes <- c("rel_mod",
               "ids_total", "lag_ids_total",
               "ids_nosleep", "lag_ids_nosleep")
 ```
@@ -218,7 +133,7 @@ Before excluding anyone:
 print_n(merged)
 ```
 
-After excluding with missing sleep variables:
+After excluding observations without information on sleep:
 
 ```{r}
 cc <- merged |> drop_na(all_of(sleep_vars))
@@ -228,7 +143,7 @@ print_n(cc)
 After excluding those with less than 8 days/month of sleep data
 
 ```{r}
-cc <- filter(cc, n_weekdays >= 8)
+cc <- filter(cc, n_days >= 8)
 print_n(cc)
 ```
 
@@ -242,39 +157,39 @@ print_n(cc)
 Then, Sample 1, excluding missing relapse outcome:
 
 ```{r}
-cc1 <- cc |> drop_na(rel_mod)
+cc1 <- cc |> inner_join(s1, join_by("pid", "t"))
 print_n(cc1)
 ```
 
 And Sample 2, excluding missing IDS-SR outcome (current and lagged):
 
 ```{r}
-cc2 <- cc |> drop_na(ids_total, lag_ids_total)
+cc2 <- cc |> inner_join(s2, join_by("pid", "t"))
 print_n(cc2)
 ```
 
-### Compare excluded participants vs. included
+### Load analytical samples
 
 ```{r}
 source(here("2-models", "init.R"))
 
 d_relapse <- right_join(dat, s1, by = c("pid", "t"))
+d_relapse <- bind_cols(d_relapse, scale_variables(d_relapse))
 print_n(d_relapse)
 
 d_ids <- right_join(dat, s2, by = c("pid", "t"))
+d_ids <- bind_cols(d_ids, scale_variables(d_ids))
 print_n(d_ids)
+```
 
+### Compare excluded participants vs. included
+
+```{r}
 compare_excluded <- bind_rows(
-          filter(dat, !(user_id %in% cc2$user_id)) |>  mutate(samp = "Excluded"),
+          filter(merged, !(user_id %in% cc2$user_id)) |>  mutate(samp = "Excluded"),
           cc1 |> mutate(samp = "Sample 1"),
           cc2 |> mutate(samp = "Sample 2")
 )
-
-fix_decimals <- function(tbl) {
-  tbl |>
-  text_transform(cells_body(),
-                 function(x) str_replace(x, "\\.", "·"))
-}
 
 tab_sup1 <- compare_excluded |>
   group_by(samp, pid) |>
@@ -318,10 +233,9 @@ tab_sup1
 ```{r}
 baseline <- dat |>
   group_by(pid) |>
-  summarise(across(c(age, male, edyrs, partner,
+  reframe(across(c(age, male, edyrs, partner,
                      med_depress, med_sleep, med_other, audit),
-                   ~ first(na.omit(.x))),
-            .groups = "drop_last")
+                 \(x) first(na.omit(x))))
 
 b1 <- filter(baseline, pid %in% unique(s1$pid)) |> mutate(samp = "s1")
 b2 <- filter(baseline, pid %in% unique(s2$pid)) |> mutate(samp = "s2")
@@ -330,7 +244,7 @@ top <- bind_rows(b1, b2) |>
   group_by(samp) |>
   summarise(across(c(age, edyrs, audit), median_iqr),
             across(c(male, partner, 
-                     med_depress, med_sleep, med_other), freq_pct, 0)) |>
+                     med_depress, med_sleep, med_other), \(x) freq_pct(x, 0))) |>
   pivot_longer(-samp) |>
   pivot_wider(names_from = samp) |>
   mutate(across(c(s1, s2), switch_decimal))
@@ -391,7 +305,8 @@ tab_1 <- bind_rows(top, bottom) |>
                  placement = "right") |>
     tab_options(footnotes.marks = c("*", "†", "‡", "§"),
                 table.font.size = 10) |>
-    tab_style(style = cell_text(align = 'center'), locations = cells_column_labels()) |>
+    tab_style(style = cell_text(align = 'center'), 
+              locations = cells_column_labels()) |>
   opt_table_font(font = "Times New Roman")
 
 # Table caption:
@@ -402,42 +317,79 @@ gtsave(tab_1,
 tab_1
 ```
 
+### Count number of people missing information on ethnicity
 
-### Notes
+This is everyone in our analytical sample from the Barcelona site.
 
-* Large difference in IDS-SR between samples; to be expected given relape definition.
-* What else needs to go in this table?
+```{r}
+site <- survey |>
+  distinct(pid, site)
+
+site |> 
+  filter(pid %in% unique(s1$pid)) |>
+  count(site) |>
+  mutate(pct = n / sum(n))
+
+site |> 
+  filter(pid %in% unique(s2$pid)) |>
+  count(site) |>
+  mutate(pct = n / sum(n))
+
+# Check how many missing relapse if remove Barcelona?
+
+d_relapse |>
+  inner_join(s1, join_by(pid, t)) |>
+  summarise(n_relapse = sum(rel_mod))
+
+d_relapse |>
+  inner_join(s1, join_by(pid, t)) |>
+  inner_join(site, join_by(pid)) |>
+  group_by(site) |>
+  summarise(n_relapse = sum(rel_mod)) 
+  
+  mutate(has_y = if_else(site == "CIBER", NA, rel_mod)) |>
+  group_by(site) |>
+  summarise(n_complete = n_complete(has_y))
+
+site |>
+  inner_join(s1, join_by("pid"), multiple = "all")
+```
 
 ## Sleep measures
 
 These figures will be included as supplementary.
 
+```{r Create labels}
+# Original sleep features
+sleep_orig <- paste0("we_", trans) |> str_replace("_log", "")
+
+# Centred/transformed sleep features
+sleep_trans <- paste0("we_", trans, "_pmz")
+```
+
 ```{r}
-untrans <- str_replace_all(trans, "z_|zlog_", "")
+plot_data <- d_ids |>
+  select(user_id,
+         all_of(sleep_orig),
+         all_of(sleep_trans)) |>
+  drop_na(we_tst_med) |>
+  pivot_longer(-user_id,
+               names_to = "x",
+               values_to = "value") |>
+  left_join(labels, join_by("x"))
 
-la <- labels |>
-  mutate(x = str_replace_all(x, "z_|zlog_", "")) |>
-  select(x, label = label_orig)
-lb <- select(labels, x, label = label_trans)
-
-plot_data <- cbind(as.data.frame(scale_variables(d_ids)), d_ids) |>
-  select(user_id, all_of(trans), all_of(untrans)) |>
-  drop_na(tst_med) |>
-  pivot_longer(-user_id) |>
-  left_join(bind_rows(la, lb), by = c("name" = "x"))
-  
 spec <- list(p1 = list(title = "Sleep duration",
-                       vars = c("z_tst_med", "z_cm3_tst_med",
-                                "zlog_tst_var", "z_cm3_tst_var"),
+                       vars = c("we_tst_med_pmz", "we_cm3_tst_med_pmz",
+                                "we_tst_var_log_pmz", "we_cm3_tst_var_pmz"),
                        col = 1, nrows = 1, ncols = 4, w = 4),
              p2 = list(title = "Sleep quality",
-                       vars = c("z_sfi_med", "z_slpeff_med",
-                                "z_sol_med", "zlog_sol_var"),
+                       vars = c("we_sfi_med_pmz", "we_slpeff_med_pmz",
+                                "we_sol_med_pmz", "we_sol_var_log_pmz"),
                        col = 2, nrows = 1, ncols = 4, w = 4),
              p3 = list(title = "Sleep regularity",
-                       vars = c("z_smid_med", "zlog_smid_var",
-                                "z_cm3_smid_med", "z_cm3_smid_var",
-                                "z_sjl"),
+                       vars = c("we_smid_med_pmz", "we_smid_var_log_pmz",
+                                "we_cm3_smid_med_pmz", "we_cm3_smid_var_pmz",
+                                "we_sjl_pmz"),
                        col = 3, nrows = 2, ncols = 4, w = 4))
 
 
@@ -445,21 +397,22 @@ draw_distribution <- function(data, i, standardise = FALSE) {
   if (standardise) {
     v <- i$vars
   } else {
-    v <- str_replace_all(i$vars, "z_|zlog_", "")
+    v <- str_replace_all(i$vars, "_log_pmz$|_pmz", "")
   }
+  data$label <- data$label_trans
   p <- data |>
-    filter(name %in% v) |>
+    filter(x %in% v) |>
     drop_na() |>
-    mutate(name_f = factor(name, levels = v),
+    mutate(x_f = factor(x, levels = v),
            label = label,
-           label_f = forcats::fct_reorder(label, as.numeric(name_f))) |>
+           label_f = forcats::fct_reorder(label, as.numeric(x_f))) |>
     ggplot(aes(x = value)) +
       stat_density(fill = pal[i$col]) +
       facet_wrap(~ label_f,
                  scale = "free",
                  nrow = i$nrows,
                  ncol = i$ncols,
-                 labeller = labeller(label_f = label_wrap_gen(20))) +
+                 labeller = labeller(label_f = label_wrap_gen(25))) +
       theme_ggdist() +
       theme(axis.title.x = element_blank(),
             text = element_text(family = "Times New Roman"),
@@ -473,7 +426,7 @@ draw_distribution <- function(data, i, standardise = FALSE) {
 pal <- paletteer_d("ghibli::KikiMedium", n = 5)[-1]
 
 h <- c(1, 1, 2.2)
-dist_orig <- map(spec, ~ draw_distribution(plot_data, .x)) |>
+dist_orig <- map(spec, \(x) draw_distribution(plot_data, x)) |>
   wrap_plots(nrow = length(h),
              heights = h)
 
@@ -500,59 +453,133 @@ ggsave(dist_trans,
        dpi = 300)
 ```
 
-# Regression models
+# Summarise missing data
 
-## Average marginal effects (AME)
+```{r}
+d <-  merged |>
+  filter(t <= 24) |>
+  drop_na(all_of(str_replace(zcov, "z$", ""))) |>
+  group_by(t)
 
-See [here](#whats-the-average-marginal-effect) for an explanation. This figure
-presents the 50% and 89% credible intervals.
+pick_one <- \(ny, nx) ifelse(ny > nx, nx, ny)
+  
+get_n <- function(d, label, ...) {
+  d <- summarise(d, across(c(...), n_complete))
+  d <- data.frame(t = d[, 1], apply(d[, -1], 1, FUN = min))
+  names(d) <- c("t", label)
+  return(d)
+}
 
-The x-axis represents:
+get_count <- function(d, ...) {
+  counts <- full_join(get_n(d, label = "y", ...),
+                      get_n(d, label = "sleep", ..., all_of(sleep_vars)),
+                      join_by("t")) |>
+    mutate(sleep = if_else(sleep > y, y, sleep),
+           pct = if_else(y == sleep, 1, sleep / y))
+  return(counts)
+}
+                     
+n_ids <- get_count(d, ids_total, lag_ids_total)
+n_relmod <- get_count(d, rel_mod)
 
-- For relapse and deterioration, the percentage point change per 1 SD
-  difference in each sleep measure.
+cbind(n_relmod, n_ids) |>
+  write_csv(here("3-writing/tables/missing_data.csv"))
+
+cbind(n_relmod, n_ids)
+```
+
+# Figure showing participation throughout RADAR-MDD
+
+```{r}
+d_ids |>
+  mutate(n_fu = length(unique(t)), .by = "user_id") |>
+  ggplot() +
+  aes(x = t,
+      fill = is.na(we_tst_med_pmz),
+      y = reorder(user_id, n_fu)) +
+  geom_point() +
+  geom_line() +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(),
+        panel.grid = element_blank())
+```
+
+# Describe changes in depression severity during follow-up
+
+```{r}
+change_in_ids <- d_ids |>
+  select(pid, t, lag_ids_total, ids_total) |>
+  mutate(cm3_ids = ids_total - lag_ids_total)
+
+prop.table(table(abs(change_in_ids$cm3_ids < 4)))
+```
+
+# Process models
+
+```{r Import and process fitted models}
+fit <- list()
+fit$ids <- readRDS(here("2-models", "samples", "2023-05-06-17-11_ids.rds"))
+fit$relmod <- readRDS(here("2-models", "samples", "2023-05-05-16-15_relmod.rds"))
+fit <- reduce(fit, bind_rows)
+
+fit <- fit |>
+  filter(cent == "pm",
+         days == "we") |>
+  mutate(key = str_glue("{days}_{x}_{cent}z")) |>
+  left_join(labels, join_by("key" == "x")) |>
+  mutate(y_label = relabel_outcomes(y),
+         adj = if_else(adj == "", "Unadjusted", "Adjusted"))
+```
+
+## Average marginal effects
+
+### Figure 1
+
+This figure presents the 50% and 89% credible intervals.  The x-axis represents:
+
+- For relapse and deterioration, the percentage point change in the probability of relapse per 1 SD difference in each sleep measure.
 - For IDS-SR, the change in total score per 1 SD difference in each sleep
   measure.
+  
+```{r Extract/process AME posterior draws}
+ame <- fit |>
+  mutate(wp = map(ame, "within")) |>
+  select(y, y_label, x, label_orig,
+         adj, cent, days, wp, gr) |>
+  unnest(cols = wp) 
+  
+# Convert posteriors for relapse to percentages
+ame$wp[ame$y == "rel_mod"] <- ame$wp[ame$y == "rel_mod"] * 100
+```
+
 
 ```{r}
 #| fig-dpi: 300
 #| fig-width: 9
 #| fig-height: 8
 
-ame_draws <- readRDS(here("2-models", "processed", "ame_draws.rds"))
-
-ame_draws <- ame_draws |>
-  mutate(y_label = factor(case_when(y == "rel_mod" ~ "Relapse",
-                                    y == "ids_total" ~ "IDS-SR"),
-                          levels = c("Relapse", "IDS-SR")),
-         gr = paste("Sleep\n", gr)) |>
-  mutate(estimate = if_else(y_label == "Relapse",
-                            estimate * 100, estimate))
-
-# Labels
-# title: "Average marginal effects"
-# subtitle: "Per 1 SD difference/change in each sleep measure"
-
-make_plot <- function(d) {
-  d$full_label <- if_else(d$y == "rel_mod",
-                          "Depression relapse",
-                          "Depression severity")
-  ggplot(d) +
-  aes(x = estimate,
-      y = label_orig,
-      color = adj) +
-  geom_vline(xintercept = 0, color = pal[[1]], alpha = 0.5) +
-  stat_pointinterval(.width = c(0.89, 0.50),
-                     position = position_dodge(width = 0.5)) +
-  facet_grid(cols = vars(full_label),
+draw_plot <- function(d) {
+  d$gr <- paste("Sleep", tolower(d$gr), sep = "\n")
+  pal <- paletteer_d("ghibli::KikiMedium", n = 5)[-1]
+  d |>
+  ggplot() +
+  aes(x = wp,
+      color = adj,
+      y = label_orig) +
+   geom_vline(xintercept = 0, color = pal[[1]], alpha = 0.5) +
+   facet_grid(cols = vars(y_label),
              rows = vars(gr),
              space = "free_y",
              scales = "free") +
   theme_ggdist() + 
+  stat_pointinterval(.width = c(0.50, 0.89),
+                 position = position_dodge(width = 0.5)) +
   scale_color_manual(values = c(pal[[2]], pal[[3]])) +
   theme(strip.text.y = element_text(angle = 0),
         text = element_text(family = "Times New Roman"),
-        panel.border = element_rect(color = "gray90", fill = NA, size = 1),
+        panel.border = element_rect(color = "gray90", 
+                                    fill = NA, 
+                                    linewidth = 1),
         strip.background = element_rect(fill = "gray90"),
         strip.text.x = element_text(size = 11, face = "bold"),
         legend.title = element_blank(),
@@ -561,19 +588,27 @@ make_plot <- function(d) {
         plot.margin = margin(0, 0, 0.2, 0.2, "cm"))
 }
 
-left_plot <- ame_draws |>
-  filter(term %in% trans,
-         y == "rel_mod") |>
-  make_plot() +
-  labs(x = "Percentage points") +
+# Labels
+# title: "Average marginal effects"
+# subtitle: "Per 1 SD difference/change in each sleep measure"
+
+plot_data <- filter(ame, y != "ids_nosleep")
+
+lab_relapse <- "Percentage point change in the probability of relapse per standard deviation difference in sleep"
+lab_ids <- "Change in IDS-SR score per standard deviation difference in sleep"
+lab_w <- 40
+
+left_plot <- ame |>
+  filter(y == "rel_mod") |>
+  draw_plot() +
+  labs(x = str_wrap(lab_relapse, lab_w)) +
   theme(legend.position = "none",
   strip.text.y = element_blank())
 
-right_plot <- ame_draws |>
-  filter(term %in% trans,
-         y == "ids_total") |>
-  make_plot() +
-  labs(x = "Change in IDS-SR score") +
+right_plot <- ame |>
+  filter(y == "ids_total") |>
+  draw_plot() +
+  labs(x = str_wrap(lab_ids, lab_w)) +
   theme(axis.text.y = element_blank(),
         axis.ticks.y = element_blank())
 
@@ -589,38 +624,48 @@ ggsave(ame_plot,
 print(ame_plot)
 ```
 
-:::{.column-page}
-
+### Supplementary Table: Average marginal effects
 
 ```{r}
 #| tbl-cap: "Supplementary Table: Average Marginal Effects"
-table_data <- ame_draws |>
-  group_by(gr, y_label, label_orig, adj) |>
-  median_qi(estimate,
+table_data <- ame |>
+  group_by(gr, y, label_orig, adj) |>
+  median_qi(wp,
             .width = 0.89) |>
-  mutate(cell = paste0(sprintf('%.1f', estimate),
-                       " [",
+  mutate(cell = paste0(sprintf('%.1f', wp),
+                       "<br>[",
                        sprintf('%.1f', .lower),
                        ", ",
                        sprintf('%.1f', .upper),
                        "]"))
 
 tab_ame <- table_data |>
-  select(gr, label_orig, y_label, adj, cell) |>
-  pivot_wider(names_from = c(y_label, adj),
+  select(gr, label_orig, y, adj, cell) |>
+  mutate(adj = ifelse(adj == "Unadjusted", "u", "a")) |>
+  pivot_wider(names_from = c(y, adj),
               values_from = cell) |>
   group_by(gr) |>
+  select(gr, label_orig,
+         rel_mod_u, rel_mod_a,
+         ids_total_u, ids_total_a,
+         ids_nosleep_u, ids_nosleep_a) |>
   gt() |>
   fix_decimals() |>
-  tab_spanner(label = "Depression relapse", columns = starts_with("Relapse_")) |>
-  tab_spanner(label = "Depression severity (IDS-SR)", columns = starts_with("IDS-SR_")) |>
+  tab_spanner(label = md("Depression<br>relapse"),
+              columns = starts_with("rel_mod")) |>
+  tab_spanner(label = md("Depression severity<br>(IDS-SR)"),
+              columns = starts_with("ids_total"))  |>
+  tab_spanner(label = md("Depression severity<br>(IDS-SR; sleep items removed)"),
+              columns = starts_with("ids_nosleep"))  |>
   cols_align(align = "center", columns = everything()) |>
   cols_align(align = "left", columns = label_orig) |>
   cols_label(label_orig = "",
-             Relapse_Unadjust. = "Unadjusted",
-             Relapse_Adjusted = "Adjusted",
-             `IDS-SR_Unadjust.` = "Unadjusted",
-             `IDS-SR_Adjusted` = "Adjusted") |>
+             `rel_mod_u` = "Unadj.",
+             `ids_total_u` = "Unadj.",
+             `ids_nosleep_u` = "Unadj.",
+             `rel_mod_a` = "Adj.",
+             `ids_total_a` = "Adj.",
+             `ids_nosleep_a` = "Adj.") |>
   tab_style(style = list(cell_text(weight = "bold")),
             locations = list(cells_row_groups(),
                              cells_title(),
@@ -631,11 +676,113 @@ tab_ame <- table_data |>
 tab_ame
 ```
 
-:::
+## Adjusted predictions
 
-## Sensitivity analysis
+```{r Prepare posterior draws}
+features <- c("tst_med", "tst_var_log", "sfi_med", "slpeff_med")
+
+adj_pred <- fit |> 
+  select(y, y_label, x, label_orig, adj, cent, days, gr, pred) |>
+  filter(x %in% features,
+         adj == "Adjusted",
+         y != "ids_nosleep")
+
+adj_pred$pred <- 
+  map(adj_pred$pred, \(x) {
+  names(x) <- c("r", "draw")
+  return(x)
+  })
+
+adj_pred <- unnest(adj_pred, cols = pred)
+
+adj_pred$label_orig <- factor(adj_pred$label_orig,
+                              levels = c("Total sleep time, median",
+                                         "Total sleep time, variance",
+                                         "Sleep efficiency, median",
+                                         "Sleep fragmentation index, median"))
+```
+
+```{r Create plots}
+# Plot for relapse ------------------------------------------------------------
+colors <- c("#ffccbc", "#e64a19")
+
+# p_relapse <- plot_data |>
+  
+p_relapse <- adj_pred |>
+  filter(y  == "rel_mod") |>
+  ggplot() +
+  aes(x = r,
+      y = draw) +
+    stat_lineribbon(.width = c(0.5, 0.89)) +
+    scale_fill_manual(values = colors, labels = c("89%", "50%")) +
+    facet_grid(cols = vars(label_orig),
+               scale = "free",
+               labeller = labeller(label_orig = label_wrap_gen(15))) +
+    theme_ggdist() +
+    facet_title_horizontal() +
+    axis_titles_bottom_left() +
+    coord_cartesian(ylim = c(0, 0.25)) +
+    labs(title = "Depression relapse",
+         fill = "Credible\nintervals",
+         x = "Standard deviations difference in sleep feature",
+         y = str_wrap("Predicted probability of relapse", 10)) +
+    theme(text = element_text(family = "Times New Roman"),
+          legend.position = "none",
+          axis.title.y = element_text(hjust = 0))
+
+# Plot for IDS-SR -------------------------------------------------------------
+
+p_ids <- adj_pred |>
+  filter(y  == "ids_total") |>
+  ggplot() +
+  aes(x = r, 
+      y = draw) +
+    stat_lineribbon(.width = c(0.5, 0.89)) +
+    scale_fill_manual(values = colors, labels = c("89%", "50%")) +
+    facet_grid(cols = vars(label_orig),
+               scale = "free",
+               labeller = labeller(label_orig = label_wrap_gen(15))) +
+    theme_ggdist() +
+    facet_title_horizontal() +
+    axis_titles_bottom_left() +
+    coord_cartesian(ylim = c(24, 30)) +
+    scale_y_continuous(breaks = 24:30) +
+    labs(title = "Depression severity (IDS-SR)",
+         fill = "Credible\nintervals",
+         x = "Standard deviations difference in sleep feature",
+         y = str_wrap("Predicted value of IDS-SR", 10)) +
+    theme(text = element_text(family = "Times New Roman"),
+          axis.title.y = element_text(hjust = 0))
+
+# Combine and save ------------------------------------------------------------
+
+p_combined <- p_relapse / p_ids
+
+ggsave(p_combined,
+       filename = here("3-writing", "figures", str_glue("predictions.png")),
+       dpi = 300, dev = "png", width = 10, height = 8)
+
+p_combined
+```
+
+## Sensitivity analyses
 
 ### 1. Differences by depression subtype
+
+```{r Load posterior draws from interaction models}
+int <- list()
+int$relmod <- readRDS(here("2-models", "samples",
+                           "2023-05-23-10-42_relmod_int.rds"))
+int$ids <- readRDS(here("2-models", "samples",
+                        "2023-05-05-08-25_ids_int.rds"))
+int <- reduce(int, bind_rows)
+
+int <- int |>
+  filter(cent == "pm",
+         days == "we",
+         adj != "",
+         y != "ids_nosleep")
+```
 
 The table below reports the difference in the ELPD (expected log predictive
 density) for models with and without a 'sleep $\times$ atypical depression'
@@ -656,25 +803,47 @@ In the table, the `elpd_diff` column is the difference between the two models.
 
 But as above, none of these reach thresholds for significance.
 
-```{r}
-comparisons <- readRDS(here("2-models", "processed", "by_atypical.rds"))
-names(comparisons) <- c("model", "null", "elpd")
+See <https://discourse.mc-stan.org/t/if-elpd-diff-se-diff-2-is-this-noteworthy/20549/12>
 
-comparisons |>
-  select(model, elpd) |>
-  separate(model, c("y", "x", "adj"), "__") |>
-  left_join(labels, by = "x") |>
-  filter(adj == "adj",
-         y != "ids_nosleep") |>
-  select(gr, y, label_orig, elpd)  |>
-  mutate(how_much = sprintf("%.2f", elpd),
-         gr = paste("Sleep", gr),
-         y = if_else(y == "ids_total",
-                     "Depression severity (IDS-SR)",
-                     "Depression relapse")) |>
-  select(gr, y, label_orig, how_much) |>
-  pivot_wider(names_from = y,
-              values_from = how_much) |>
+```{r}
+extract_elpd <- function(int) {
+  loo_compare(int$wi,
+              int$wo,
+              criterion = "kfold")
+}
+
+int$elpd <- map(int$int, extract_elpd)
+
+# Identify 'significant' differences as those where
+# (1) The model _with_ the interaction is better (i.e., a positive value);
+# (2) The elpd_diff is greater than (2 * se_diff)
+# (3) The elpd_diff is > 4.
+
+int <- bind_cols(int,
+          map_dfr(int$elpd, \(d) {
+            c(
+              interaction_better = if_else(dimnames(d)[[1]][1] == "int$wi", 1, 0),
+              elpd_diff = d[2, 1],
+              se_diff = d[2, 2]
+            )
+          })
+)
+
+odp <- \(x) sprintf("%.1f", x)
+
+interaction_table <- int |>
+  mutate(elpd_diff = if_else(interaction_better == 1, -elpd_diff, elpd_diff),
+         diff_se = elpd_diff / se_diff,
+         sig = if_else((interaction_better == 1 & 
+                        elpd_diff > 4 & 
+                        abs(elpd_diff / se_diff) > 2), "*", ""),
+         cell = str_glue("{odp(elpd_diff)} ({odp(se_diff)}{sig})"),
+         key = str_glue("we_{x}_pmz")) |>
+  left_join(labels, join_by(key == x)) |>
+  select(gr, y, cell, label_orig) |>
+  pivot_wider(names_from = y, values_from = cell)
+  
+interaction_table |>
   gt() |>
   cols_label(label_orig = "") |>
   cols_align(align = "right", columns = everything()) |>
@@ -686,60 +855,17 @@ comparisons |>
   opt_table_font(font = "Times New Roman") 
 ```
 
-### 2. Remove sleep items from IDS-SR
+```{r Investigate the significant interaction term}
 
-The results are slightly attenuated, but conclusions unchanged.
+fit <- int |>
+  filter(y == "rel_mod",
+         x == "tst_med") |>
+  pluck("int", 1, "wo")
 
-```{r}
-#| tbl-cap: "Supplementary Table: Average Marginal Effects for IDS-SR without sleep items"
+avg_slopes(fit, variables = "we_tst_med_pmz", by = "atyp")
 
-ids_orig <- readRDS(here("2-models", "processed", "ame_draws.rds")) |>
-  filter(y == "ids_total") |>
-  mutate(gr = paste("Sleep\n", gr),
-         y = "A")
-
-ids_nosleep <-  readRDS(here("2-models", "processed", "ame_nosleep.rds")) |>
-  filter(y == "ids_nosleep") |>
-  mutate(gr = paste("Sleep\n", gr),
-         y = "B")
-
-table_data <- bind_rows(ids_orig, ids_nosleep) |>
-  group_by(gr, y, label_orig, adj) |>
-  median_qi(estimate, .width = 0.89) |>
-  mutate(cell = str_glue("{sprintf('%.1f', estimate)} [{sprintf('%.1f', .lower)}, {sprintf('%.1f', .upper)}]"))
-
-table_data |>
-  select(gr, label_orig, y, adj, cell) |>
-  pivot_wider(names_from = c(y, adj),
-              values_from = cell) |>
-  group_by(gr) |>
-  gt() |>
-  tab_spanner(label = md("**IDS-SR**<br>*Original scale*"),
-              columns = starts_with("A")) |>
-  tab_spanner(label = md("**IDS-SR**<br>*Sleep items removed*"),
-              columns = starts_with("B")) |>
-  cols_label(label_orig = "",
-             `A_Unadjust.` = "Unadjusted",
-             `A_Adjusted` = "Adjusted",
-             `B_Unadjust.` = "Unadjusted",
-             `B_Adjusted` = "Adjusted") |>
-  cols_align(align = "left", columns = label_orig) |>
-  tab_style(style = list(cell_text(weight = "bold")),
-            locations = list(cells_row_groups(),
-                             cells_title())) |>
-  opt_table_font(font = "Times New Roman") |>
-  fix_decimals()
 ```
 
-## How do I interpret a credible interval?
+### 2. Remove sleep items from IDS-SR
 
-This is a Bayesian analysis where the posterior distribution is summarised using Credible Intervals (CrI). The purpose of credible intervals is to summarise uncertainty in an estimated parameter.
-
-We're interested in the posterior distribution for a given effect, produced by combining a prior distribution with our data. The posterior distribution reflects the range of possible values for a parameter of interest. Some values are more likely than others.
-
-Credible intervals are used to describe the distribution of the posterior distribution.
-
--   A 50% credible interval has a 50% probability of the true value falling within this range.
--   A 90% credible interval has a 90% probability of the true value falling within this range.
-
-In most figures, I present the 50% and 89% credible intervals. But this choice is arbritrary -- all we're doing is summarising the posterior distribution.
+This is reported above in Supplementary Table 1.
