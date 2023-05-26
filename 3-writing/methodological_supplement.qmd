@@ -1,7 +1,7 @@
 ---
 title: Methodological supplement
 author: Ewan Carr
-date: 2023-05-12
+date: 2023-05-26
 date-format: long
 format:
   pdf:
@@ -45,7 +45,7 @@ knitr::opts_chunk$set(cache = FALSE, warning = FALSE,
 We considered 13 sleep features organised into three domains:
 
 | Domain           | Feature                                 | Definition                                                                                                                                                                                              | Derivation of sleep feature                                                                                                                                                                                                                                                                                 |
-|------------------|-----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|------------|------------|-------------------|-------------------------------|
 | Sleep duration   | Total sleep time^†^                     | Median daily hours spent asleep.                                                                                                                                                                        | The sum of all 'non-awake' Fitbit sleep stages (i.e., light, deep, and REM).                                                                                                                                                                                                                                |
 |                  | Change in total sleep time^‡^           | Difference in median daily hours spent asleep over the four weeks before the current outcome assessment (T~2~) versus the four weeks before to the previous outcome assessment three months ago (T~1~). | As above.                                                                                                                                                                                                                                                                                                   |
 |                  | Total sleep time, variance^†^           | Intra-individual variance in median daily hours spent asleep.                                                                                                                                           | As above.                                                                                                                                                                                                                                                                                                   |
