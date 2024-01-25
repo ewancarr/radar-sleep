@@ -1,8 +1,6 @@
 ---
 title: Methodological supplement
 author: Ewan Carr
-date: 2023-05-26
-date-format: long
 format:
   pdf:
     pdf-engine: "xelatex"
@@ -37,7 +35,7 @@ editor_options:
 We considered 13 sleep features organised into three domains:
 
 | Domain           | Feature                                 | Definition                                                                                                                                                                                              | Derivation of sleep feature                                                                                                                                                                                                                                                                                 |
-|------------|------------|-------------------|-------------------------------|
+|------------------|-----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Sleep duration   | Total sleep time^†^                     | Median daily hours spent asleep.                                                                                                                                                                        | The sum of all 'non-awake' Fitbit sleep stages (i.e., light, deep, and REM).                                                                                                                                                                                                                                |
 |                  | Change in total sleep time^‡^           | Difference in median daily hours spent asleep over the four weeks before the current outcome assessment (T~2~) versus the four weeks before to the previous outcome assessment three months ago (T~1~). | As above.                                                                                                                                                                                                                                                                                                   |
 |                  | Total sleep time, variance^†^           | Intra-individual variance in median daily hours spent asleep.                                                                                                                                           | As above.                                                                                                                                                                                                                                                                                                   |
@@ -219,12 +217,12 @@ sessionInfo()
 
 ::: {.cell-output .cell-output-stdout}
 ```
-R version 4.2.3 (2023-03-15)
+R version 4.3.2 (2023-10-31)
 Platform: x86_64-pc-linux-gnu (64-bit)
-Running under: Ubuntu 22.04.2 LTS
+Running under: Ubuntu 22.04.3 LTS
 
 Matrix products: default
-BLAS:   /usr/lib/x86_64-linux-gnu/blas/libblas.so.3.10.0
+BLAS:   /usr/lib/x86_64-linux-gnu/blas/libblas.so.3.10.0 
 LAPACK: /usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3.10.0
 
 locale:
@@ -235,6 +233,9 @@ locale:
  [9] LC_ADDRESS=C               LC_TELEPHONE=C            
 [11] LC_MEASUREMENT=en_GB.UTF-8 LC_IDENTIFICATION=C       
 
+time zone: Etc/UTC
+tzcode source: system (glibc)
+
 attached base packages:
 [1] splines   stats     graphics  grDevices utils     datasets  methods  
 [8] base     
@@ -244,52 +245,47 @@ other attached packages:
  [4] conflicted_1.2.0       janitor_2.2.0          marginaleffects_0.10.0
  [7] gtsummary_1.7.0        scales_1.2.1           tidybayes_3.0.3       
 [10] cmdstanr_0.5.3         brms_2.18.0            Rcpp_1.0.10           
-[13] here_1.0.1             forcats_1.0.0          stringr_1.5.0         
-[16] dplyr_1.1.0            purrr_1.0.1            readr_2.1.4           
-[19] tidyr_1.3.0            tibble_3.1.8           ggplot2_3.4.1         
-[22] tidyverse_1.3.2       
+[13] here_1.0.1             lubridate_1.9.2        forcats_1.0.0         
+[16] stringr_1.5.0          dplyr_1.1.0            purrr_1.0.1           
+[19] readr_2.1.4            tidyr_1.3.0            tibble_3.2.1          
+[22] ggplot2_3.4.4          tidyverse_2.0.0       
 
 loaded via a namespace (and not attached):
-  [1] readxl_1.4.2         backports_1.4.1      plyr_1.8.8          
-  [4] igraph_1.4.1         svUnit_1.0.6         crosstalk_1.2.0     
-  [7] rstantools_2.2.0     inline_0.3.19        digest_0.6.31       
- [10] htmltools_0.5.4      fansi_1.0.4          memoise_2.0.1       
- [13] magrittr_2.0.3       checkmate_2.1.0      googlesheets4_1.0.1 
- [16] tzdb_0.3.0           modelr_0.1.10        RcppParallel_5.1.7  
- [19] matrixStats_0.63.0   xts_0.13.0           timechange_0.2.0    
- [22] prettyunits_1.1.1    colorspace_2.1-0     rvest_1.0.3         
- [25] ggdist_3.2.1         haven_2.5.1          xfun_0.37           
- [28] callr_3.7.3          crayon_1.5.2         jsonlite_1.8.4      
- [31] zoo_1.8-11           glue_1.6.2           gtable_0.3.1        
- [34] gargle_1.3.0         distributional_0.3.1 pkgbuild_1.4.0      
- [37] rstan_2.21.8         abind_1.4-5          mvtnorm_1.1-3       
- [40] GGally_2.1.2         DBI_1.1.3            miniUI_0.1.1.1      
- [43] xtable_1.8-4         stats4_4.2.3         StanHeaders_2.21.0-7
- [46] DT_0.27              htmlwidgets_1.6.1    httr_1.4.4          
- [49] threejs_0.3.3        RColorBrewer_1.1-3   arrayhelpers_1.1-0  
- [52] posterior_1.4.0      ellipsis_0.3.2       reshape_0.8.9       
- [55] pkgconfig_2.0.3      loo_2.5.1            farver_2.1.1        
- [58] dbplyr_2.3.0         utf8_1.2.3           tidyselect_1.2.0    
- [61] rlang_1.0.6          reshape2_1.4.4       later_1.3.0         
- [64] cachem_1.0.6         munsell_0.5.0        cellranger_1.1.0    
- [67] tools_4.2.3          cli_3.6.0            generics_0.1.3      
- [70] broom_1.0.3          evaluate_0.20        fastmap_1.1.0       
- [73] yaml_2.3.7           processx_3.8.0       fs_1.6.1            
- [76] nlme_3.1-162         mime_0.12            xml2_1.3.3          
- [79] compiler_4.2.3       bayesplot_1.10.0     shinythemes_1.2.0   
- [82] rstudioapi_0.14      reprex_2.0.2         broom.helpers_1.12.0
- [85] stringi_1.7.12       ps_1.7.2             Brobdingnag_1.2-9   
- [88] lattice_0.20-45      Matrix_1.5-1         markdown_1.5        
- [91] shinyjs_2.1.0        tensorA_0.36.2       vctrs_0.5.2         
- [94] pillar_1.8.1         lifecycle_1.0.3      bridgesampling_1.1-2
- [97] data.table_1.14.8    httpuv_1.6.9         R6_2.5.1            
-[100] promises_1.2.0.1     gridExtra_2.3        codetools_0.2-19    
-[103] colourpicker_1.2.0   gtools_3.9.4         assertthat_0.2.1    
-[106] rprojroot_2.0.3      withr_2.5.0          shinystan_2.6.0     
-[109] parallel_4.2.3       hms_1.1.2            grid_4.2.3          
-[112] coda_0.19-4          rmarkdown_2.20       snakecase_0.11.0    
-[115] googledrive_2.0.0    shiny_1.7.4          lubridate_1.9.2     
-[118] base64enc_0.1-3      dygraphs_1.1.1.6    
+  [1] gridExtra_2.3        inline_0.3.19        rlang_1.1.1         
+  [4] magrittr_2.0.3       snakecase_0.11.0     matrixStats_0.63.0  
+  [7] compiler_4.3.2       loo_2.5.1            callr_3.7.3         
+ [10] vctrs_0.6.3          reshape2_1.4.4       arrayhelpers_1.1-0  
+ [13] pkgconfig_2.0.3      crayon_1.5.2         fastmap_1.1.0       
+ [16] backports_1.4.1      ellipsis_0.3.2       utf8_1.2.3          
+ [19] threejs_0.3.3        promises_1.2.0.1     rmarkdown_2.20      
+ [22] markdown_1.5         tzdb_0.4.0           ps_1.7.2            
+ [25] xfun_0.37            cachem_1.0.6         jsonlite_1.8.4      
+ [28] later_1.3.0          reshape_0.8.9        parallel_4.3.2      
+ [31] prettyunits_1.1.1    R6_2.5.1             dygraphs_1.1.1.6    
+ [34] RColorBrewer_1.1-3   stringi_1.7.12       StanHeaders_2.26.28 
+ [37] GGally_2.1.2         rstan_2.32.3         zoo_1.8-11          
+ [40] base64enc_0.1-3      bayesplot_1.10.0     httpuv_1.6.9        
+ [43] Matrix_1.6-2         igraph_1.4.1         timechange_0.2.0    
+ [46] tidyselect_1.2.0     rstudioapi_0.14      abind_1.4-5         
+ [49] yaml_2.3.7           codetools_0.2-19     miniUI_0.1.1.1      
+ [52] curl_5.0.0           processx_3.8.0       pkgbuild_1.4.0      
+ [55] lattice_0.22-5       plyr_1.8.8           shiny_1.7.4         
+ [58] withr_2.5.0          bridgesampling_1.1-2 posterior_1.4.0     
+ [61] coda_0.19-4          evaluate_0.21        RcppParallel_5.1.7  
+ [64] ggdist_3.2.1         xts_0.13.0           pillar_1.8.1        
+ [67] tensorA_0.36.2       checkmate_2.1.0      DT_0.27             
+ [70] stats4_4.3.2         shinyjs_2.1.0        distributional_0.3.1
+ [73] generics_0.1.3       rprojroot_2.0.3      hms_1.1.2           
+ [76] rstantools_2.2.0     munsell_0.5.0        gtools_3.9.4        
+ [79] xtable_1.8-4         glue_1.6.2           tools_4.3.2         
+ [82] shinystan_2.6.0      data.table_1.14.8    colourpicker_1.2.0  
+ [85] mvtnorm_1.1-3        grid_4.3.2           QuickJSR_1.0.7      
+ [88] crosstalk_1.2.0      colorspace_2.1-0     nlme_3.1-163        
+ [91] cli_3.6.1            svUnit_1.0.6         fansi_1.0.4         
+ [94] broom.helpers_1.12.0 Brobdingnag_1.2-9    V8_4.2.2            
+ [97] gtable_0.3.1         digest_0.6.31        htmlwidgets_1.6.1   
+[100] farver_2.1.1         memoise_2.0.1        htmltools_0.5.4     
+[103] lifecycle_1.0.3      mime_0.12            shinythemes_1.2.0   
 ```
 :::
 :::
