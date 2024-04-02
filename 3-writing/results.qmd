@@ -185,13 +185,14 @@ print_n(d_ids)
 ### Compare excluded participants vs. included
 
 ```{r}
+
 compare_excluded <- bind_rows(
           filter(merged, !(user_id %in% cc2$user_id)) |>  mutate(samp = "Excluded"),
           cc1 |> mutate(samp = "Sample 1"),
           cc2 |> mutate(samp = "Sample 2")
 )
 
-tab_sup1 <- compare_excluded |>
+compare_excluded |>
   group_by(samp, pid) |>
   select(samp, age, ids_total, male, partner, edyrs, med_depress) |>
   summarise(across(everything(), first), .groups = "drop") |>
@@ -203,16 +204,9 @@ tab_sup1 <- compare_excluded |>
                            male = "Male gender",
                            edyrs = "Years of education",
                            partner = "Lives with partner",
-                           med_depress = "Currently taking medication for depression")) |>
-  as_gt() |>
-  fix_decimals() |>
-  opt_table_font(font = "Times New Roman")
-
+                           med_depress = "Currently taking medication for depression"))
 # Table caption
 # Supplementary Table 1: Comparing excluded vs. included individuals
-
-gtsave(tab_sup1, here("3-writing", "tables", "tab_sup1.rtf"))
-tab_sup1
 ```
 
 ## Sample characteristics
@@ -628,6 +622,7 @@ print(ame_plot)
 
 ```{r}
 #| tbl-cap: "Supplementary Table: Average Marginal Effects"
+
 table_data <- ame |>
   group_by(gr, y, label_orig, adj) |>
   median_qi(wp,
@@ -647,12 +642,48 @@ tab_ame <- table_data |>
   group_by(gr) |>
   select(gr, label_orig,
          rel_mod_u, rel_mod_a,
+         ids_total_u, ids_total_a) |>
+  gt() |>
+  # fix_decimals() |>
+  tab_spanner(label = md("Depression<br>relapse"),
+              columns = starts_with("rel_mod")) |>
+  tab_spanner(label = md("Depression severity<br>(IDS-SR)"),
+              columns = starts_with("ids_total"))  |>
+  # tab_spanner(label = md("Depression severity<br>(IDS-SR; sleep items removed)"),
+  #             columns = starts_with("ids_nosleep"))  |>
+  cols_align(align = "center", columns = everything()) |>
+  cols_align(align = "left", columns = label_orig) |>
+  cols_label(label_orig = "",
+             `rel_mod_u` = "Unadj.",
+             `ids_total_u` = "Unadj.",
+             # `ids_nosleep_u` = "Unadj.",
+             `rel_mod_a` = "Adj.",
+             `ids_total_a` = "Adj.") |>
+             # `ids_nosleep_a` = "Adj.") |>
+  tab_style(style = list(cell_text(weight = "bold")),
+            locations = list(cells_row_groups(),
+                             cells_title(),
+                             cells_column_spanners())) |>
+  opt_table_font(font = "Times New Roman") |>
+  fmt_markdown(columns = everything())
+
+tab_ame
+```
+
+### Supplementary Table: Average marginal effects with IDS-SR sleep items removed
+
+```{r}
+
+tab_ame_nosleep <- table_data |>
+  select(gr, label_orig, y, adj, cell) |>
+  mutate(adj = ifelse(adj == "Unadjusted", "u", "a")) |>
+  pivot_wider(names_from = c(y, adj),
+              values_from = cell) |>
+  group_by(gr) |>
+  select(gr, label_orig,
          ids_total_u, ids_total_a,
          ids_nosleep_u, ids_nosleep_a) |>
   gt() |>
-  fix_decimals() |>
-  tab_spanner(label = md("Depression<br>relapse"),
-              columns = starts_with("rel_mod")) |>
   tab_spanner(label = md("Depression severity<br>(IDS-SR)"),
               columns = starts_with("ids_total"))  |>
   tab_spanner(label = md("Depression severity<br>(IDS-SR; sleep items removed)"),
@@ -660,10 +691,8 @@ tab_ame <- table_data |>
   cols_align(align = "center", columns = everything()) |>
   cols_align(align = "left", columns = label_orig) |>
   cols_label(label_orig = "",
-             `rel_mod_u` = "Unadj.",
              `ids_total_u` = "Unadj.",
              `ids_nosleep_u` = "Unadj.",
-             `rel_mod_a` = "Adj.",
              `ids_total_a` = "Adj.",
              `ids_nosleep_a` = "Adj.") |>
   tab_style(style = list(cell_text(weight = "bold")),
@@ -673,7 +702,7 @@ tab_ame <- table_data |>
   opt_table_font(font = "Times New Roman") |>
   fmt_markdown(columns = everything())
 
-tab_ame
+tab_ame_nosleep
 ```
 
 ## Adjusted predictions
