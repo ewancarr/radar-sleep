@@ -8,7 +8,9 @@ library(tidyverse)
 library(here)
 library(AF)
 library(lme4)
+library(gt)
 source(here("2-models", "init.R"))
+source(here("1-cleaning", "extra", "labels.R"))
 
 create_binary <- function(x) {
   bins <- cut(x,
@@ -16,6 +18,9 @@ create_binary <- function(x) {
               labels = 1:4)
   return(ifelse(bins == 4, 1, 0))
 }
+
+d_relapse <- inner_join(dat, s1, join_by("pid", "t"))
+d_relapse <- bind_cols(d_relapse, scale_variables(d_relapse))
 
 d <- d_relapse |>
   mutate(across(c(male, atyp, med_depress, med_other, med_sleep, partner), 
@@ -49,7 +54,7 @@ map_dfr(trans, \(sleep_feature) {
            est = s$AF[1],
            lo = s$confidence.interval[1], 
            hi = s$confidence.interval[2]))
-}) |>
+  }) |>
   mutate(across(est:hi, \(x) as.numeric(x) * 100),
          cell = str_glue("{dp(est)} [{dp(lo)}, {dp(hi)}]"),
          x = str_glue("we_{sleep_feature}_pmz")) |>
