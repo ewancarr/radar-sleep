@@ -16,7 +16,7 @@ library(conflicted)
 conflicts_prefer(dplyr::mutate,
                  dplyr::filter)
 source(here("functions.R"), echo = TRUE)
-set_cmdstan_path("~/.cmdstan/cmdstan-2.32.0")
+set_cmdstan_path("~/.cmdstan/cmdstan-2.34.1")
 
 # Set parameters
 params <- list(verbose = FALSE,
